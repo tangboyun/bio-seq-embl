@@ -17,5 +17,9 @@ cabal-version:       >=1.8
 library
   -- exposed-modules:     
   -- other-modules:       
-  build-depends:       base
+  build-depends:       base,
+                       attoparsec-conduit,
+                       attoparsec,
+                       bytestring
+                        
   hs-source-dirs:      src
