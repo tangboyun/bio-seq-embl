@@ -99,4 +99,10 @@ lineDE = do
 
 lineKW = do
   _ <- "KW" .*> count 3 (satisfy (== ' ')) <?> "KW Line"
-  takeWhile1 (\c -> c /= ';' || c /= '.') `sepBy1` string "; " <* char '.' <* endOfLine
+  ss <- takeWhile1 (\c -> c /= ';' && c /= '.' && c/= '\n') `sepBy` string "; " <?> "Keywords sepBy \"; \""
+  return ss
+  
+parseKW = do
+  fmap concat (lineKW `sepBy1` char '\n') <* char '.' <* endOfLine
+
+  

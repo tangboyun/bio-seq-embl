@@ -6,3 +6,4 @@ dist/
 emblFormat.txt
 /.directory
 /FT_current.html
+/src/Bio/Seq/EMBL/Parser_flymake.hs
