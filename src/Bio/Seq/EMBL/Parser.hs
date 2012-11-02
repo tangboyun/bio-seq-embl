@@ -248,10 +248,11 @@ parseRL = parsePaper <|>
 
 -- | A very fast predicate for the official IUPAC-IUB single-letter base codes.
 -- @
---    isIUPAC w == w `elem` "ABCDGHKMNRSTVWYabcdghkmnrstvwy"
+--    isIUPAC w == toEnum w `elem` "ABCDGHKMNRSTVWYabcdghkmnrstvwy"
 -- @
 isIUPAC :: Word8 -> Bool
-isIUPAC w | pred <= 25 = unsafeShiftL (1 :: Int32) (fromIntegral pred) .&. iupacMask /= 0
+isIUPAC w | pred <= 25 = unsafeShiftL (1 :: Int32)
+                         (fromIntegral pred) .&. iupacMask /= 0
           | otherwise = False
 {-# INLINE isIUPAC #-}
   where
