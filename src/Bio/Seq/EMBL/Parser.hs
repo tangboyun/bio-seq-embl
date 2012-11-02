@@ -32,8 +32,8 @@ import           Data.Word
 import           Prelude hiding (takeWhile)
 import           System.Locale
 
-lineID = do
-  _ <- "ID" .*> count 3 (satisfy (== ' ')) <?> "ID Line"
+parseID = do
+  _ <- mkHeader "ID" 
   t1 <- takeWhile1 (/= ';') <* char ';' <?> "Primary accession number" 
   skipSpace
   t2 <- "SV" .*> skipSpace *>
@@ -80,25 +80,12 @@ lineID = do
         skipSpace <*. "BP." <* endOfLine
   undefined
   
-lineAC = do
-  _ <- "AC" .*> count 3 (satisfy (== ' ')) <?> "AC Line"
-  (takeWhile1 (/= ';') <* char ';') `sepBy1` (many1 $ char ' ') <* endOfLine
 
-linePR = do
-  _ <- "PR" .*> count 3 (satisfy (== ' ')) <?> "PR Line"
-  "Project:" .*> (decimal <?> "Project Number") <* char ';' <* endOfLine
 
-toTime :: String -> Maybe UTCTime
-toTime = parseTime defaultTimeLocale "%d-%b-%Y"
-
-trim :: ByteString -> ByteString
-trim str = if isSpace $ B8.last str
-           then trim $ B8.init str
-           else str
                 
 parseDT = do
-  _ <- "DT" .*> count 3 (satisfy (== ' ')) <?> "DT Line"
-  takeWhile1 (/= ' ') <* skipSpace
+  mkHeader "DT" *>
+    takeWhile1 (/= ' ') <* skipSpace
 
 lineDT1 = do
   str1 <- fmap B8.unpack parseDT
@@ -118,122 +105,119 @@ lineDT2 = do
     Nothing -> fail "Not a valid time string"
     Just t -> return (t,relNum,verNum)
 
-lineDE = do
-  _ <- "DE" .*> count 3 (satisfy (== ' ')) <?> "DE Line"
-  takeWhile1 (/= '\n') <* endOfLine
+parseDE = do
+  mkHeader "DE" *> 
+    takeWhile1 (/= '\n') <* endOfLine
 
-lineKW = do
-  _ <- "KW" .*> count 3 (satisfy (== ' ')) <?> "KW Line"
-  ss <- takeWhile1 (\c -> c /= ';' && c /= '.' && c /= '\n') `sepBy`
-        string "; " <?> "Keywords sepBy \"; \""
-  _ <- option "" $ string ";"
-  return ss
   
 parseKW = do
-  fmap concat (lineKW `sepBy1` char '\n') <* char '.' <* endOfLine
+  fmap concat (goKW `sepBy1` char '\n') <* char '.' <* endOfLine
+  where
+    goKW = do
+      mkHeader "KW" *>
+        (takeWhile1 (\c -> c /= ';' && c /= '.' && c /= '\n') `sepBy`
+         string "; " <?> "Keywords sepBy \"; \"")
+        <* (option "" $ string ";")
 
 parseOS = do
-  _ <- "OS" .*> count 3 (satisfy (== ' ')) <?> "OS Line"
+  _ <- mkHeader "OS"
   des <- fmap (B8.intercalate " ") $
          takeWhile1 (\c -> c /= '(' && c /= '\n') `sepBy1`
-         (endOfLine <*. "OS   ")
+         (endOfLine <* mkHeader "OS")
   name <- option Nothing $
           -- can handle "OS   Trifolium repens\nOS   (white\nOS   clover)\n"
           fmap (Just . B8.intercalate " ") $
-          ((endOfLine *> "OS   (" .*>
+          ((endOfLine *> mkHeader "OS" *> char '(' *>
             (takeWhile1 (\c -> c /= ')' && c /= '\n') `sepBy1`
-             (endOfLine <*. "OS   ")) <* char ')') <|>
+             (endOfLine <* mkHeader "OS")) <* char ')') <|>
            (char '(' *> (takeWhile1 (\c -> c /= ')' && c /= '\n') `sepBy1`
-                         (endOfLine <*. "OS   ")) <* char ')'))
+                         (endOfLine <* mkHeader "OS")) <* char ')'))
   endOfLine
   return (des,name)
 
-lineOC = do
-  _ <- "OC" .*> count 3 (satisfy (== ' ')) <?> "OC Line"
-  ss <- takeWhile1 (\c -> c /= ';' && c /= '.' && c /= '\n') `sepBy`
-        string "; " <?> "Organism Classification sepBy \"; \""
-  _ <- option "" $ string ";"
-  return ss
-
 parseOC = do
-  fmap concat (lineOC `sepBy1` char '\n') <* char '.' <* endOfLine  
-
-lineOG = do
-  "OG" .*> count 3 (satisfy (== ' ')) *>
-    takeWhile1 (/= '\n') <*
-    endOfLine <?> "OG Line"
-
-lineRN = do
-  "ON" .*> count 3 (satisfy (== ' ')) *> char '[' *>
-    decimal <*
-    char ']' <* endOfLine <?> "RN Line"
-
-lineRC = do
-  "RC" .*> count 3 (satisfy (== ' ')) *>
-    takeWhile1 (/= '\n') <?> "RC Line"
-
-parseRC = do
-  comments <- lineRC `sepBy1` endOfLine
-  endOfLine
-  return $! B8.intercalate " " comments
-
-lineRP = do
-  "RP" .*> count 3 (satisfy (== ' ')) *>
-    (do
-        beg <- decimal
-        _ <- char '-'
-        end <- decimal
-        return (beg,end)
-    ) `sepBy1` string ", "
-
-parseRP =
-  lineRP `sepBy1` endOfLine <* endOfLine
-
-parseResource = parsePUBMED <|>
-                parseDOI <|>
-                parseAGRICOLA
+  fmap concat (goOC `sepBy1` char '\n') <* char '.' <* endOfLine  
   where
-    parsePUBMED = fmap PUBMED
-                  (string "PUBMED" *> string "; " *>
-                   (takeWhile1 isDigit <?> "Invalid PMID") <*
-                   char '.')
-    parseDOI = fmap (DOI . B8.init)
-               (string "DOI" *> string "; " *>
-                (takeWhile1 (/= '\n')))
-    parseAGRICOLA = fmap (AGRICOLA . B8.init)
-                    (string "AGRICOLA" *> string "; " *>
-                     (takeWhile1 (/= '\n')))
-
-lineRX = do
-  ("RX" .*> count 3 (satisfy (== ' ')) *>
-   parseResource <?> "RX Line") <* endOfLine 
-  
-lineRG = do
-  ("RG" .*> count 3 (satisfy (== ' ')) <?> "RG Line") *>
+    goOC = do
+      mkHeader "OC" *>
+        (takeWhile1 (\c -> c /= ';' && c /= '.' && c /= '\n') `sepBy`
+         string "; " <?> "Organism Classification sepBy \"; \"") <*
+        (option "" $ string ";")
+        
+parseOG = do
+  mkHeader "OG" *>
     takeWhile1 (/= '\n') <* endOfLine
 
-lineRA = do
-  ("RA" .*> count 3 (satisfy (== ' ')) <?> "RA Line") *>
-    (takeWhile1 (\c -> c /= ',' && c /= '\n' && c /= ';') `sepBy1` string ", ")
+parseRN = do
+  mkHeader "ON" *> char '[' *>
+    decimal <* char ']' <* endOfLine 
+
+parseRC = do
+  fmap (B8.intercalate " ") $
+    (mkHeader "RC" *> takeWhile1 (/= '\n') `sepBy1` endOfLine) <* endOfLine
+  where
+    
+
+parseRP =
+  goRP `sepBy1` endOfLine <* endOfLine
+  where
+    goRP = do
+      mkHeader "RP" *>
+        (do
+            beg <- decimal
+            _ <- char '-'
+            end <- decimal
+            return (beg,end)
+        ) `sepBy1` string ", "
+
+
+parseRX = do
+  mkHeader "RX" *> parseResource <* endOfLine 
+  where
+    parseResource = parsePUBMED <|>
+                    parseDOI <|>
+                    parseAGRICOLA <?> "reference cross-reference"
+      where
+        parsePUBMED = fmap PUBMED
+                      ("PUBMED" .*> string "; " *>
+                       (takeWhile1 isDigit <?> "Invalid PMID") <*
+                       char '.')
+        parseDOI = fmap (DOI . B8.init)
+                   ("DOI" .*> string "; " *>
+                    (takeWhile1 (/= '\n')))
+        parseAGRICOLA = fmap (AGRICOLA . B8.init)
+                        ("AGRICOLA" .*> string "; " *>
+                         (takeWhile1 (/= '\n')))
+    
+parseRG = do
+  mkHeader "RG" *> takeWhile1 (/= '\n') <* endOfLine
+
 
 parseRA = do
-  fmap concat $ (lineRA `sepBy1` string ",\n") <* char ';' <* endOfLine
+  fmap concat $
+    goRA `sepBy1` string ",\n" <* char ';' <* endOfLine
+  where
+    goRA = do
+      mkHeader "RA" *>
+        takeWhile1
+        (\c -> c /= ',' && c /= '\n' && c /= ';') `sepBy1`
+        string ", "
 
-lineRT = do
-  "RT" .*> count 3 (satisfy (== ' ')) <?> "RT Line"
     
 parseRT = do
   fmap (trim . B8.intercalate " ") $ -- trim for rare case "RT   \"Title\nRT   \";\n"
     (
-      lineRT *> char '"' *>
-      (fmap (:[]) $ takeWhile1 $ \c -> c /= '"' && c /= '\n' && c /= ';')
-      <* char '"' <|>  -- one line title 
+      mkHeader "RT" *> char '"' *>
+      (fmap (:[]) $ takeWhile1 $ \c -> c /= '"' && c /= '\n' && c /= ';') <*
+      char '"' <|>  -- one line title 
       (do
-          line1 <- lineRT *> char '"' *> takeWhile1 (/= '\n') <* endOfLine <* lineRT
-          ls <- takeWhile (\c -> c /= '\n' && c /= '"') `sepBy1` (endOfLine *> lineRT)
+          line1 <- mkHeader "RT" *> char '"' *> takeWhile1 (/= '\n') <*
+                   endOfLine <* mkHeader "RT"
+          ls <- takeWhile (\c -> c /= '\n' && c /= '"') `sepBy1`
+                (endOfLine *> mkHeader "RT")
           _ <- char '"'
           return $ line1 : ls) <|> -- multi-line title
-      lineRT *> return []  -- empty title
+      mkHeader "RT" *> return []  -- empty title
     ) <* char ';' <* endOfLine
        
 
@@ -244,17 +228,49 @@ parseRL = parsePaper <|>
           parseUnpublished <|>
           parseMisc <|>
           parseBook <|>
-          parseThesis
+          parseThesis <?> "Reference Location"
+  
+parseSQ = do
+  slen <- mkHeader "SQ" *> "Sequence " .*> decimal <*. " BP;"
+  aNum <- char ' ' *> decimal <*. " A;"
+  cNum <- char ' ' *> decimal <*. " C;"
+  gNum <- char ' ' *> decimal <*. " G;"
+  tNum <- char ' ' *> decimal <*. " T;"
+  oNum <- char ' ' *> decimal <*. " other;" <* endOfLine
+  sdata <- fmap (SeqData . B8.concat . concat) $
+           many1 $
+           count 5 (char ' ') *>
+           (takeWhile1 (isIUPAC . fromIntegral . ord) `sepBy1` char ' ') <*
+           skipSpace <* many1 digit <* endOfLine
+  lineTM
+  return (SeqSta slen aNum cNum gNum tNum oNum,sdata) <?> "Sequence Data"
 
 -- | A very fast predicate for the official IUPAC-IUB single-letter base codes.
 -- @
 --    isIUPAC w == toEnum w `elem` "ABCDGHKMNRSTVWYabcdghkmnrstvwy"
 -- @
+--     Code      Base Description
+--     ----      --------------------------------------------------------------
+--     G         Guanine
+--     A         Adenine
+--     T         Thymine
+--     C         Cytosine
+--     R         Purine               (A or G)
+--     Y         Pyrimidine           (C or T or U)
+--     M         Amino                (A or C)
+--     K         Ketone               (G or T)
+--     S         Strong interaction   (C or G)
+--     W         Weak interaction     (A or T)
+--     H         Not-G                (A or C or T) H follows G in the alphabet
+--     B         Not-A                (C or G or T) B follows A
+--     V         Not-T (not-U)        (A or C or G) V follows U
+--     D         Not-C                (A or G or T) D follows C
+--     N         Any                  (A or C or G or T)
+--                                      A-1
 isIUPAC :: Word8 -> Bool
 isIUPAC w | pred <= 25 = unsafeShiftL (1 :: Int32)
                          (fromIntegral pred) .&. iupacMask /= 0
           | otherwise = False
-{-# INLINE isIUPAC #-}
   where
     pred = (w .|. 32) - 97 -- toLower w - ord 'a'
     iupacMask :: Int32
@@ -262,4 +278,5 @@ isIUPAC w | pred <= 25 = unsafeShiftL (1 :: Int32)
     -- iupacMask = foldr1 (.|.) $
     --             map (unsafeShiftL 1 . (\n -> n - 97) . ord . toLower)
     --             "ABCDGHKMNRSTVWY"
+{-# INLINE isIUPAC #-}
 

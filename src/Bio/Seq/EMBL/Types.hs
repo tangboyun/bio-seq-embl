@@ -50,7 +50,7 @@ data RefLoc where
     , year :: {-# UNPACK #-} !Int
     } -> RefLoc
   Patent ::
-    { patentNumber :: ApplicationNumber
+    { patentNumber :: PatentNumber
     , patentType :: PatentType
     , serialNumber :: Int
     , date :: UTCTime
@@ -64,7 +64,19 @@ data RefLoc where
     , year :: {-# UNPACK #-} !Int
     } -> RefLoc
    deriving (Show,Eq)
-  
+
+data SeqStatistic = SeqSta 
+  { seqlength :: {-# UNPACK #-} !Int
+  , numOfA :: {-# UNPACK #-} !Int
+  , numOfC :: {-# UNPACK #-} !Int
+  , numOfG :: {-# UNPACK #-} !Int
+  , numOfT :: {-# UNPACK #-} !Int
+  , numOfOthers :: {-# UNPACK #-} !Int
+  } deriving (Show,Eq)
+
+
+newtype Keyword = Keyword ByteString
+                deriving (Show,Eq)                  
 newtype Author = Author ByteString
                deriving (Show,Eq)
 newtype Publisher = Publisher ByteString
@@ -75,9 +87,12 @@ newtype Address = Address ByteString
                 deriving (Show,Eq)
 newtype Database = Database ByteString
                  deriving (Show,Eq)
-newtype ApplicationNumber = ApplicationNumber ByteString
+newtype PatentNumber = PatentNumber ByteString
                           deriving (Show,Eq)
 newtype Applicant = Applicant ByteString
                   deriving (Show,Eq)
 newtype PatentType = PatentType ByteString
                    deriving (Show,Eq)
+
+newtype SeqData = SeqData ByteString
+                deriving (Show,Eq)
