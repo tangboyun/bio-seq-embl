@@ -260,5 +260,6 @@ isIUPAC w | pred <= 25 = unsafeShiftL (1 :: Int32)
     iupacMask :: Int32
     iupacMask = 23999695
     -- iupacMask = foldr1 (.|.) $
-    --             map (unsafeShiftL 1 . (\n -> n - 97) . ord . toLower) "ABCDGHKMNRSTVWY"
+    --             map (unsafeShiftL 1 . (\n -> n - 97) . ord . toLower)
+    --             "ABCDGHKMNRSTVWY"
 
