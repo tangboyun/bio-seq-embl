@@ -245,3 +245,19 @@ parseRL = parsePaper <|>
           parseMisc <|>
           parseBook <|>
           parseThesis
+
+-- | A very fast predicate for the official IUPAC-IUB single-letter base codes.
+-- @
+--    isIUPAC w == w `elem` "ABCDGHKMNRSTVWYabcdghkmnrstvwy"
+-- @
+isIUPAC :: Word8 -> Bool
+isIUPAC w | pred <= 25 = unsafeShiftL (1 :: Int32) (fromIntegral pred) .&. iupacMask /= 0
+          | otherwise = False
+{-# INLINE isIUPAC #-}
+  where
+    pred = (w .|. 32) - 97 -- toLower w - ord 'a'
+    iupacMask :: Int32
+    iupacMask = 23999695
+    -- iupacMask = foldr1 (.|.) $
+    --             map (unsafeShiftL 1 . (\n -> n - 97) . ord . toLower) "ABCDGHKMNRSTVWY"
+

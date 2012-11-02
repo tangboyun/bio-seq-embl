@@ -119,13 +119,3 @@ parsePatent = do
     Nothing -> fail "Not a valid time string"
     Just t -> return $ Patent patNum patType sn t appCan
 
-
-isIUPAC :: Word8 -> Bool
-isIUPAC w | pred <= 25 = unsafeShiftL (1 :: Int32) (fromIntegral pred) .&. iupacMask /= 0
-          | otherwise = False
-  where pred = (w .|. 32) - 97
-        iupacMask :: Int32
-        iupacMask = 23999695
-        -- iupacMask = foldr1 (.|.) $
-        --             map (unsafeShiftL 1 . (\n -> n - 97) . ord . toLower) "ABCDGHKMNRSTVWY"
-
