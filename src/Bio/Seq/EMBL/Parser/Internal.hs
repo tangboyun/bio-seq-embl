@@ -47,6 +47,92 @@ maybeXX = option "" lineXX *> return ()
 lineXX = "XX" .*> takeWhile (/= '\n') <* endOfLine
 lineTM = "//" .*> return () <?> "termination line"
 
+parseDC = "CON" .*> return CON <|> 
+          "PAT" .*> return PAT <|> 
+          "EST" .*> return EST <|> 
+          "GSS" .*> return GSS <|> 
+          "HTC" .*> return HTC <|> 
+          "HTG" .*> return HTG <|> 
+          "MGA" .*> return MGA <|> 
+          "WGS" .*> return WGS <|> 
+          "TSA" .*> return TSA <|> 
+          "STS" .*> return STS <|> 
+          "STD" .*> return STD <?> 
+          "Data Class"
+
+parseTAX = "PHG" .*> return PHG <|>
+           "ENV" .*> return ENV <|>
+           "FUN" .*> return FUN <|>
+           "HUM" .*> return HUM <|>
+           "INV" .*> return INV <|>
+           "MAM" .*> return MAM <|>
+           "VRT" .*> return VRT <|>
+           "MUS" .*> return MUS <|>
+           "PLN" .*> return PLN <|>
+           "PRO" .*> return PRO <|>
+           "ROD" .*> return ROD <|>
+           "SYN" .*> return SYN <|>
+           "TGN" .*> return TGN <|>
+           "UNC" .*> return UNC <|>
+           "VRL" .*> return VRL <?>
+           "Taxonomic Division"
+
+parseTOPO = "linear" .*> return Linear <|>
+            "circular" .*> return Circular <?>
+            "Topology"
+
+parseID = do
+  _ <- mkHeader "ID" 
+  t1 <- takeWhile1 (/= ';') <* char ';' <?> "Primary accession number" 
+  skipSpace
+  t2 <- "SV" .*> skipSpace *>
+        (decimal <?> "Sequence version number") <* char ';' 
+  t3 <- skipSpace *> parseTOPO <* char ';'
+  t4 <- skipSpace *> takeWhile1 (/= ';') <*
+        char ';' <?> "Molecule type"
+  t5 <- skipSpace *> parseDC <* char ';'
+  t6 <- skipSpace *> parseTAX <* char ';'
+  t7 <- skipSpace *> (decimal <?> "Sequence Length") <*
+        skipSpace <*. "BP." <* endOfLine
+  undefined
+  
+parseDT = do
+  mkHeader "DT" *>
+    takeWhile1 (/= ' ') <* skipSpace
+
+lineDT1 = do
+  str1 <- fmap B8.unpack parseDT
+  relNum <- "(Rel." .*> skipSpace *> decimal <* char ',' <*
+            skipSpace <*. "Created)" <* endOfLine
+  case toTime str1 of
+    Nothing -> fail "Not a valid time string"
+    Just t -> return (t,relNum)
+  
+lineDT2 = do
+  str2 <- fmap B8.unpack parseDT
+  relNum <- "(Rel." .*> skipSpace *> decimal <* char ',' <*
+            skipSpace <*. "Last updated,"
+  verNum <- skipSpace *> "Version" .*> skipSpace *> decimal <*
+            char ')' <* endOfLine
+  case toTime str2 of
+    Nothing -> fail "Not a valid time string"
+    Just t -> return (t,relNum,verNum)
+
+parseDE = do
+  mkHeader "DE" *> 
+    takeWhile1 (/= '\n') <* endOfLine
+
+  
+parseKW = do
+  fmap concat (goKW `sepBy1` char '\n') <* char '.' <* endOfLine
+  where
+    goKW = do
+      mkHeader "KW" *>
+        (takeWhile1 (\c -> c /= ';' && c /= '.' && c /= '\n') `sepBy`
+         string "; " <?> "Keywords sepBy \"; \"")
+        <* (option "" $ string ";")
+
+
 parseOS = do
   _ <- mkHeader "OS"
   des <- fmap (B8.intercalate " ") $
