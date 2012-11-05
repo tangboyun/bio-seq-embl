@@ -21,16 +21,12 @@ import           Bio.Seq.EMBL.Types
 import           Control.Applicative
 import           Data.Attoparsec.ByteString.Char8
 import           Data.Bits
-import           Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as B8
 import           Data.Char hiding (isSpace,isDigit)
 import           Data.Int
 import           Data.Maybe
-import           Data.Time
-import           Data.Time.Format
 import           Data.Word
 import           Prelude hiding (takeWhile)
-import           System.Locale
 
 parseID = do
   _ <- mkHeader "ID" 
@@ -119,160 +115,51 @@ parseKW = do
          string "; " <?> "Keywords sepBy \"; \"")
         <* (option "" $ string ";")
 
-parseOS = do
-  _ <- mkHeader "OS"
-  des <- fmap (B8.intercalate " ") $
-         takeWhile1 (\c -> c /= '(' && c /= '\n') `sepBy1`
-         (endOfLine <* mkHeader "OS")
-  name <- option Nothing $
-          -- can handle "OS   Trifolium repens\nOS   (white\nOS   clover)\n"
-          fmap (Just . B8.intercalate " ") $
-          ((endOfLine *> mkHeader "OS" *> char '(' *>
-            (takeWhile1 (\c -> c /= ')' && c /= '\n') `sepBy1`
-             (endOfLine <* mkHeader "OS")) <* char ')') <|>
-           (char '(' *> (takeWhile1 (\c -> c /= ')' && c /= '\n') `sepBy1`
-                         (endOfLine <* mkHeader "OS")) <* char ')'))
-  endOfLine
-  return (des,name)
+parseOranism = do
+  (name,cName) <- parseOS
+  cs <- parseOC
+  maybeXX
+  og <- optional parseOG
+  return $ Oranism name cName cs og
+  
 
-parseOC = do
-  fmap concat (goOC `sepBy1` char '\n') <* char '.' <* endOfLine  
-  where
-    goOC = do
-      mkHeader "OC" *>
-        (takeWhile1 (\c -> c /= ';' && c /= '.' && c /= '\n') `sepBy`
-         string "; " <?> "Organism Classification sepBy \"; \"") <*
-        (option "" $ string ";")
-        
-parseOG = do
-  mkHeader "OG" *>
-    takeWhile1 (/= '\n') <* endOfLine
-
-parseRN = do
-  mkHeader "ON" *> char '[' *>
-    decimal <* char ']' <* endOfLine 
-
-parseRC = do
-  fmap (B8.intercalate " ") $
-    (mkHeader "RC" *> takeWhile1 (/= '\n') `sepBy1` endOfLine) <* endOfLine
-  where
-    
-
-parseRP =
-  goRP `sepBy1` endOfLine <* endOfLine
-  where
-    goRP = do
-      mkHeader "RP" *>
-        (do
-            beg <- decimal
-            _ <- char '-'
-            end <- decimal
-            return (beg,end)
-        ) `sepBy1` string ", "
-
-
-parseRX = do
-  mkHeader "RX" *> parseResource <* endOfLine 
-  where
-    parseResource = parsePUBMED <|>
-                    parseDOI <|>
-                    parseAGRICOLA <?> "reference cross-reference"
-      where
-        parsePUBMED = fmap PUBMED
-                      ("PUBMED" .*> string "; " *>
-                       (takeWhile1 isDigit <?> "Invalid PMID") <*
-                       char '.')
-        parseDOI = fmap (DOI . B8.init)
-                   ("DOI" .*> string "; " *>
-                    (takeWhile1 (/= '\n')))
-        parseAGRICOLA = fmap (AGRICOLA . B8.init)
-                        ("AGRICOLA" .*> string "; " *>
-                         (takeWhile1 (/= '\n')))
-    
-parseRG = do
-  mkHeader "RG" *> takeWhile1 (/= '\n') <* endOfLine
-
-
-parseRA = do
-  fmap concat $
-    goRA `sepBy1` string ",\n" <* char ';' <* endOfLine
-  where
-    goRA = do
-      mkHeader "RA" *>
-        takeWhile1
-        (\c -> c /= ',' && c /= '\n' && c /= ';') `sepBy1`
-        string ", "
-
-    
-parseRT = do
-  fmap (trim . B8.intercalate " ") $ -- trim for rare case "RT   \"Title\nRT   \";\n"
-    (
-      mkHeader "RT" *> char '"' *>
-      (fmap (:[]) $ takeWhile1 $ \c -> c /= '"' && c /= '\n' && c /= ';') <*
-      char '"' <|>  -- one line title 
-      (do
-          line1 <- mkHeader "RT" *> char '"' *> takeWhile1 (/= '\n') <*
-                   endOfLine <* mkHeader "RT"
-          ls <- takeWhile (\c -> c /= '\n' && c /= '"') `sepBy1`
-                (endOfLine *> mkHeader "RT")
-          _ <- char '"'
-          return $ line1 : ls) <|> -- multi-line title
-      mkHeader "RT" *> return []  -- empty title
-    ) <* char ';' <* endOfLine
-       
-
-parseRL :: Parser RefLoc
-parseRL = parsePaper <|>
-          parseSubmitted <|>
-          parsePatent <|>
-          parseUnpublished <|>
-          parseMisc <|>
-          parseBook <|>
-          parseThesis <?> "Reference Location"
+parseRef :: Parser Reference
+parseRef = do
+  rn <- fmap RefNo parseRN
+  rc <- optional $ fmap RefComment parseRC
+  rp <- optional $ parseRP
+  rx <- optional $ parseRX
+  rg <- optional $ fmap RefGroup $ parseRG
+  as <- fmap (map Author) parseRA
+  title <- fmap Title parseRT
+  rl <- parseRL
+  return $ Reference rn rc rp rx rg as title rl
   
 parseSQ = do
-  slen <- mkHeader "SQ" *> "Sequence " .*> decimal <*. " BP;"
+  _ <- mkHeader "SQ" *> "Sequence " .*> decimal <*. " BP;"
   aNum <- char ' ' *> decimal <*. " A;"
   cNum <- char ' ' *> decimal <*. " C;"
   gNum <- char ' ' *> decimal <*. " G;"
   tNum <- char ' ' *> decimal <*. " T;"
   oNum <- char ' ' *> decimal <*. " other;" <* endOfLine
-  sdata <- fmap (SeqData . B8.concat . concat) $
+  sdata <- fmap (B8.concat . concat) $
            many1 $
            count 5 (char ' ') *>
            (takeWhile1 (isIUPAC . fromIntegral . ord) `sepBy1` char ' ') <*
            skipSpace <* many1 digit <* endOfLine
   lineTM
-  return (SeqSta slen aNum cNum gNum tNum oNum,sdata) <?> "Sequence Data"
+  return (SQ (SeqSta aNum cNum gNum tNum oNum) sdata) <?> "Sequence Data"
 
 -- | A very fast predicate for the official IUPAC-IUB single-letter base codes.
 -- @
 --    isIUPAC w == toEnum w `elem` "ABCDGHKMNRSTVWYabcdghkmnrstvwy"
 -- @
---     Code      Base Description
---     ----      --------------------------------------------------------------
---     G         Guanine
---     A         Adenine
---     T         Thymine
---     C         Cytosine
---     R         Purine               (A or G)
---     Y         Pyrimidine           (C or T or U)
---     M         Amino                (A or C)
---     K         Ketone               (G or T)
---     S         Strong interaction   (C or G)
---     W         Weak interaction     (A or T)
---     H         Not-G                (A or C or T) H follows G in the alphabet
---     B         Not-A                (C or G or T) B follows A
---     V         Not-T (not-U)        (A or C or G) V follows U
---     D         Not-C                (A or G or T) D follows C
---     N         Any                  (A or C or G or T)
---                                      A-1
 isIUPAC :: Word8 -> Bool
-isIUPAC w | pred <= 25 = unsafeShiftL (1 :: Int32)
-                         (fromIntegral pred) .&. iupacMask /= 0
+isIUPAC w | pre <= 25 = unsafeShiftL (1 :: Int32)
+                         (fromIntegral pre) .&. iupacMask /= 0
           | otherwise = False
   where
-    pred = (w .|. 32) - 97 -- toLower w - ord 'a'
+    pre = (w .|. 32) - 97 -- toLower w - ord 'a'
     iupacMask :: Int32
     iupacMask = 23999695
     -- iupacMask = foldr1 (.|.) $
