@@ -16,18 +16,19 @@ module Bio.Seq.EMBL.Parser.Internal
 
        where
 
+import           Bio.Seq.EMBL.Types
 import           Control.Applicative
 import           Data.Attoparsec.ByteString.Char8
+import           Data.Bits
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as B8
+import           Data.Char hiding (isSpace,isDigit)
+import           Data.Int
 import           Data.Maybe
 import           Data.Time
+import           Data.Word
+import           Prelude hiding (takeWhile)
 import           System.Locale
-import           Data.Int
-import Bio.Seq.EMBL.Types
-import Prelude hiding (takeWhile)
-import Data.Word
-import Data.Char hiding (isSpace,isDigit)
 
 toTime :: String -> Maybe UTCTime
 toTime = parseTime defaultTimeLocale "%d-%b-%Y"
@@ -42,7 +43,7 @@ mkHeader :: ByteString -> Parser String
 mkHeader str = str .*> count 3 (satisfy (== ' ')) <?>
                (B8.unpack str ++ " Line")
 
-maybeXX = option "" lineXX *> return ()
+maybeXX = option "" (fmap B8.concat $ many1 lineXX) *> return ()
 
 lineXX = "XX" .*> takeWhile (/= '\n') <* endOfLine
 lineTM = "//" .*> return () <?> "termination line"
@@ -83,18 +84,18 @@ parseTOPO = "linear" .*> return Linear <|>
 
 parseID = do
   _ <- mkHeader "ID" 
-  t1 <- takeWhile1 (/= ';') <* char ';' <?> "Primary accession number" 
+  acc <- takeWhile1 (/= ';') <* char ';' <?> "Primary accession number" 
   skipSpace
-  t2 <- "SV" .*> skipSpace *>
-        (decimal <?> "Sequence version number") <* char ';' 
-  t3 <- skipSpace *> parseTOPO <* char ';'
-  t4 <- skipSpace *> takeWhile1 (/= ';') <*
+  sv <- "SV" .*> skipSpace *>
+        (decimal <?> "Sequence version number" :: Parser Int) <* char ';' 
+  topo <- skipSpace *> parseTOPO <* char ';'
+  mol <- skipSpace *> takeWhile1 (/= ';') <*
         char ';' <?> "Molecule type"
-  t5 <- skipSpace *> parseDC <* char ';'
-  t6 <- skipSpace *> parseTAX <* char ';'
-  t7 <- skipSpace *> (decimal <?> "Sequence Length") <*
-        skipSpace <*. "BP." <* endOfLine
-  undefined
+  dat <- skipSpace *> parseDC <* char ';'
+  tax <- skipSpace *> parseTAX <* char ';'
+  len <- skipSpace *> (decimal :: Parser Int) <*
+         skipSpace <*. "BP." <* endOfLine
+  return (acc,sv,topo,mol,dat,tax,len)
   
 parseDT = do
   mkHeader "DT" *>
@@ -102,7 +103,8 @@ parseDT = do
 
 lineDT1 = do
   str1 <- fmap B8.unpack parseDT
-  relNum <- "(Rel." .*> skipSpace *> decimal <* char ',' <*
+  relNum <- fmap Release $
+            "(Rel." .*> skipSpace *> decimal <* char ',' <*
             skipSpace <*. "Created)" <* endOfLine
   case toTime str1 of
     Nothing -> fail "Not a valid time string"
@@ -110,28 +112,29 @@ lineDT1 = do
   
 lineDT2 = do
   str2 <- fmap B8.unpack parseDT
-  relNum <- "(Rel." .*> skipSpace *> decimal <* char ',' <*
+  relNum <- fmap Release $
+            "(Rel." .*> skipSpace *> decimal <* char ',' <*
             skipSpace <*. "Last updated,"
-  verNum <- skipSpace *> "Version" .*> skipSpace *> decimal <*
+  verNum <- fmap Version $
+            skipSpace *> "Version" .*> skipSpace *> decimal <*
             char ')' <* endOfLine
   case toTime str2 of
     Nothing -> fail "Not a valid time string"
     Just t -> return (t,relNum,verNum)
 
 parseDE = do
-  mkHeader "DE" *> 
-    takeWhile1 (/= '\n') <* endOfLine
+  fmap (B8.intercalate " ") $
+    mkHeader "DE" *> 
+    takeWhile1 (/= '\n') `sepBy1`
+    (endOfLine *> mkHeader "DE") <* endOfLine
 
   
 parseKW = do
-  fmap concat (goKW `sepBy1` char '\n') <* char '.' <* endOfLine
+  fmap concat $ mkHeader "KW" *>
+    (goKW `sepBy1` string "; ") `sepBy1`
+    (char ';' *> endOfLine *> mkHeader "KW" ) <* char '.' <* endOfLine
   where
-    goKW = do
-      mkHeader "KW" *>
-        (takeWhile1 (\c -> c /= ';' && c /= '.' && c /= '\n') `sepBy`
-         string "; " <?> "Keywords sepBy \"; \"")
-        <* (option "" $ string ";")
-
+    goKW = fmap Keyword $ takeWhile (\c -> c /= ';' && c /= '.')
 
 parseOS = do
   _ <- mkHeader "OS"
@@ -150,29 +153,29 @@ parseOS = do
   return (des,name)
 
 parseOC = do
-  fmap concat $ goOC <* char '.' <* endOfLine  
-  where
-    goOC = do
-      mkHeader "OC" *>
-        (takeWhile1 (\c -> c /= ';' && c /= '.' && c /= '\n') `sepBy1`
-         string "; ") `sepBy1` (char ';' *> mkHeader "OC")
-        
+  fmap concat $
+    mkHeader "OC" *>
+    (takeWhile1 (\c -> c /= '.' && c /= ';') `sepBy1`
+     string "; ") `sepBy1`
+    (char ';' *> endOfLine *> mkHeader "OC") <*
+    char '.' <* endOfLine
         
 parseOG = do
   mkHeader "OG" *>
     takeWhile1 (/= '\n') <* endOfLine
   
-parseProject = do
+parsePR = do
   mkHeader "PR" *> takeWhile (/= ';') <* char ';' <* endOfLine
   
 
-parseAccession = do
-  mkHeader "AC" *>
-    ((takeWhile1 (/= ';') <* char ';') `sepBy1`
-     many1 (char ' ')) <* endOfLine
+parseAC = do
+  fmap concat $ mkHeader "AC" *>
+    (takeWhile1 (/= ';') `sepBy1`
+     string "; ") `sepBy1` ( char ';' *> endOfLine *> mkHeader "AC") <*
+    char ';' <* endOfLine
   
 parsePaper = do
-  (pub,vol,iss,pBeg,pEnd,y) <- parseJ
+  (pub,vol,iss,pBeg,pEnd,y) <- mkHeader "RL" *> parseJ
   return $ Paper pub vol iss (pBeg,pEnd) y
 
 parseMisc = do
@@ -316,23 +319,22 @@ parseRA = do
         (\c -> c /= ',' && c /= '\n' && c /= ';') `sepBy1`
         string ", "
 
-    
-parseRT = do
-  fmap (trim . B8.intercalate " ") $ -- trim for rare case "RT   \"Title\nRT   \";\n"
-    ( mkHeader "RT" *> return []  <|> -- empty title
-      mkHeader "RT" *> char '"' *>
-      (fmap (:[]) $ takeWhile1 $ \c -> c /= '"' && c /= '\n' && c /= ';') <*
-      char '"' <|>  -- one line title 
-      (do
-          line1 <- mkHeader "RT" *> char '"' *> takeWhile1 (/= '\n') <*
-                   endOfLine <* mkHeader "RT"
-          ls <- takeWhile (\c -> c /= '\n' && c /= '"') `sepBy1`
-                (endOfLine *> mkHeader "RT")
-          _ <- char '"'
-          return $ line1 : ls) -- multi-line title
-    ) <* char ';' <* endOfLine
-       
 
+parseRT = empLine <|>
+          oneLine <|>
+          mulLine <?> "Reference Title"
+  where
+    empLine = mkHeader "RT" *> char ';' *> endOfLine *> return ""
+    oneLine = mkHeader "RT" *> char '"' *>
+              takeWhile1 (\c -> c /= '\n' && c /= '"') <*
+              char '"' <* char ';' <* endOfLine
+    mulLine = fmap (trim . B8.intercalate " ") $
+              mkHeader "RT" *> char '"' *>
+              (takeWhile (\c -> c /= '"' && c /= '\n') `sepBy1`
+               (endOfLine *> mkHeader "RT")) <*
+              char '"' <* char ';' <* endOfLine
+              
+    
 parseRL :: Parser RefLoc
 parseRL = parsePaper <|>
           parseSubmitted <|>
@@ -360,6 +362,10 @@ isLegalFKChar w | 97 <= w, w <= 122 = True
                 | otherwise = False
 {-# INLINE isLegalFKChar #-}          
 
+parseCC = do
+  fmap (B8.intercalate " ") $
+    mkHeader "CC" *> takeWhile1 (/= '\n') `sepBy1`
+    (endOfLine *> mkHeader "CC") <* endOfLine
   
 parseFT :: Parser [Feature]
 parseFT = do
@@ -397,15 +403,8 @@ parseFT = do
 
     lineFH = "FH" .*> takeWhile (/= '\n') *> endOfLine
 
- 
-parseCON = do
-  fmap (Constructed . B8.intercalate " ") $
-    (many1
-     (mkHeader "CO" *> takeWhile1 (/= '\n') <*
-      endOfLine) <?> "CON records")
                                       
-parseDR = fmap DBCrossRef $ 
-          mkHeader "DR" *> takeWhile (/= '.') <* char '.' <* endOfLine
+parseDR = mkHeader "DR" *> takeWhile (/= '.') <* char '.' <* endOfLine
 
 parseASI = do
   lineAH *>
@@ -430,3 +429,63 @@ parseASI = do
     "Assembly Information"
   where
     lineAH = "AH" .*> takeWhile (/= '\n') *> endOfLine
+
+parseOrganism = do
+  (name,cName) <- parseOS
+  cs <- parseOC
+  maybeXX
+  og <- optional parseOG
+  return $ Oranism name cName cs og
+  
+
+parseRef :: Parser Reference
+parseRef = do
+  rn <- fmap RefNo parseRN
+  rc <- optional $ fmap RefComment parseRC
+  rp <- optional $ parseRP
+  rx <- optional $ parseRX
+  rg <- optional $ fmap RefGroup $ parseRG
+  as <- fmap (map Author) parseRA
+  title <- fmap Title parseRT
+  rl <- parseRL
+  return $ Reference rn rc rp rx rg as title rl
+
+ 
+parseCS = do
+  fmap (CS . B8.intercalate " ") $
+    (many1
+     (mkHeader "CO" *> takeWhile1 (/= '\n') <*
+      endOfLine) <?> "CON records") <*
+    lineTM
+
+parseSQ = do
+  _ <- mkHeader "SQ" *> "Sequence " .*> decimal <*. " BP;"
+  aNum <- char ' ' *> decimal <*. " A;"
+  cNum <- char ' ' *> decimal <*. " C;"
+  gNum <- char ' ' *> decimal <*. " G;"
+  tNum <- char ' ' *> decimal <*. " T;"
+  oNum <- char ' ' *> decimal <*. " other;" <* endOfLine
+  sdata <- fmap (B8.concat . concat) $
+           many1 $
+           count 5 (char ' ') *>
+           (takeWhile1 (isIUPAC . fromIntegral . ord) `sepBy1` char ' ') <*
+           skipSpace <* many1 digit <* endOfLine
+  lineTM
+  return (SQ (SeqSta aNum cNum gNum tNum oNum) sdata) <?> "Sequence Data"
+
+-- | A very fast predicate for the official IUPAC-IUB single-letter base codes.
+-- @
+--    isIUPAC w == toEnum w `elem` "ABCDGHKMNRSTVWYabcdghkmnrstvwy"
+-- @
+isIUPAC :: Word8 -> Bool
+isIUPAC w | pre <= 25 = unsafeShiftL (1 :: Int32)
+                         (fromIntegral pre) .&. iupacMask /= 0
+          | otherwise = False
+  where
+    pre = (w .|. 32) - 97 -- toLower w - ord 'a'
+    iupacMask :: Int32
+    iupacMask = 23999695
+    -- iupacMask = foldr1 (.|.) $
+    --             map (unsafeShiftL 1 . (\n -> n - 97) . ord . toLower)
+    --             "ABCDGHKMNRSTVWY"
+{-# INLINE isIUPAC #-}

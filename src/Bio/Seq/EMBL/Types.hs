@@ -39,8 +39,8 @@ data SeqRecord where
     , seqlength :: Int
     , accessions :: [ByteString]
     , project :: Maybe ByteString
-    , createdTime :: UTCTime
-    , lastUpdatedTime :: UTCTime
+    , created :: (UTCTime,Release)
+    , lastUpdated :: (UTCTime,Release,Version)
     , description :: ByteString
     , keywords :: [Keyword]
     , organism :: Organism
@@ -51,7 +51,8 @@ data SeqRecord where
     , features :: [Feature]
     , seqdata :: SeqData
     } -> SeqRecord
-    
+    deriving (Show,Eq)
+
 data Organism = Oranism
   { name :: ByteString
   , commonName :: Maybe ByteString
@@ -127,6 +128,10 @@ data SeqStatistic = SeqSta
   , numOfOthers :: {-# UNPACK #-} !Int
   } deriving (Show,Eq)
 
+newtype Version = Version Int
+                deriving (Show,Eq)
+newtype Release = Release Int
+                deriving (Show,Eq)
 newtype RefNo = RefNo Int
               deriving (Show,Eq)
 newtype RefComment = RefComment ByteString
@@ -156,7 +161,7 @@ newtype PatentType = PatentType ByteString
                    deriving (Show,Eq)
 
 data SeqData = SQ SeqStatistic ByteString
-             | CN ByteString 
+             | CS ByteString 
              deriving (Show,Eq)
 
 data Feature = Feature Key Location [(Qualifier,Value)]
@@ -171,8 +176,6 @@ newtype Qualifier = Qualifier ByteString
 newtype Value = Value ByteString
                 deriving (Show,Eq)
                          
-newtype Constructed = Constructed ByteString
-                    deriving (Show,Eq)
                       
 newtype DBCrossRef = DBCrossRef ByteString
                      deriving (Show,Eq)
