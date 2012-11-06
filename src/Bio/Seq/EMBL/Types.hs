@@ -19,10 +19,10 @@ module Bio.Seq.EMBL.Types
 import Data.ByteString (ByteString)
 import Data.Time
 
-data Resource = PUBMED ByteString
-              | DOI ByteString
-              | AGRICOLA ByteString
-              deriving (Show,Eq)
+data Resource = Resource
+  { resource :: ByteString
+  , resourceIdx :: ByteString
+  } deriving (Show,Eq)
                        
 data Topology = Circular
               | Linear
@@ -30,29 +30,44 @@ data Topology = Circular
                        
 data SeqRecord where
   SeqRecord ::
-    { accessionNumber :: ByteString
-    , sequenceVersion :: Int
-    , topology :: Topology
-    , moleculeType :: ByteString
-    , dataClass :: DataClass
-    , taxonomy :: Taxonomy
-    , seqlength :: Int
+    { identification :: Identification
     , accessions :: [ByteString]
     , project :: Maybe ByteString
-    , created :: (UTCTime,Release)
-    , lastUpdated :: (UTCTime,Release,Version)
-    , description :: ByteString
-    , keywords :: [Keyword]
-    , organism :: Organism
-    , references :: [Reference]
-    , dbCrossRef :: Maybe ByteString
+    , date :: Maybe Date
+    , description :: Maybe ByteString
+    , keywords :: Maybe [Keyword]
+    , organism :: Maybe Organism
+    , references :: Maybe [Reference]
+    , dbCrossRef :: Maybe [DBCrossRef]
     , comment :: Maybe ByteString
     , assemblyInformation :: Maybe [AssemblyInformation]
-    , features :: [Feature]
+    , features :: Maybe [Feature]
     , seqdata :: SeqData
     } -> SeqRecord
     deriving (Show,Eq)
 
+data Identification = ID
+  { identifier :: ByteString
+  , sequenceVersion :: Maybe Int
+  , topology :: Maybe Topology
+  , moleculeType :: ByteString
+  , dataClass :: Maybe DataClass
+  , taxonomy :: Taxonomy
+  , seqlength :: Int
+  } deriving (Show,Eq)
+  
+    
+data Date = Date 
+  { created :: (UTCTime,Release)
+  , lastUpdated :: (UTCTime,Release,Version)
+  } deriving (Show,Eq)
+
+data DBCrossRef = DBCrossRef
+  { externalDB :: Database
+  , primaryID :: ByteString
+  , secondaryID :: Maybe ByteString
+  } deriving (Show,Eq)
+             
 data Organism = Oranism
   { name :: ByteString
   , commonName :: Maybe ByteString
@@ -65,7 +80,7 @@ data Reference where
     { refNo :: RefNo
     , refComment :: Maybe RefComment
     , refPosition :: Maybe [(Int,Int)]
-    , refSource :: Maybe Resource
+    , refSource :: Maybe [Resource]
     , refGroup :: Maybe RefGroup
     , refAuthors :: [Author]
     , refTitle :: Title
@@ -78,20 +93,25 @@ data RefLoc where
     { journal :: Publication
     , volume :: {-# UNPACK #-} !Int
     , issue :: Maybe Int
-    , pages :: (Int,Int)
+    , pages :: ByteString
     , year :: {-# UNPACK #-} !Int
     } -> RefLoc
+    
+  Epub :: 
+    { journal :: Publication
+    , year :: {-# UNPACK #-} !Int
+    } -> RefLoc -- ^ [Epub prior to print]
     
   Book ::
     { book :: Publication
     , authors :: [Author]
     , publisher :: Publisher
-    , pages :: (Int,Int)
+    , pages :: ByteString
     , year :: {-# UNPACK #-} !Int
     } -> RefLoc
     
   Submitted ::
-    { date :: UTCTime
+    { submitDate :: UTCTime
     , database :: Database
     , address :: Maybe Address
     } -> RefLoc
@@ -107,7 +127,7 @@ data RefLoc where
     { patentNumber :: PatentNumber
     , patentType :: PatentType
     , serialNumber :: Int
-    , date :: UTCTime
+    , submitDate :: UTCTime
     , applicant :: Applicant
     } -> RefLoc
     
@@ -115,8 +135,11 @@ data RefLoc where
     { journal :: Publication
     , volume :: {-# UNPACK #-} !Int
     , issue :: Maybe Int
-    , pages :: (Int,Int)
+    , pages :: ByteString
     , year :: {-# UNPACK #-} !Int
+    } -> RefLoc
+  Other ::
+    { otherRefLoc :: ByteString
     } -> RefLoc
    deriving (Show,Eq)
 
@@ -130,10 +153,13 @@ data SeqStatistic = SeqSta
 
 newtype Version = Version Int
                 deriving (Show,Eq)
+                         
 newtype Release = Release Int
                 deriving (Show,Eq)
+                         
 newtype RefNo = RefNo Int
               deriving (Show,Eq)
+                       
 newtype RefComment = RefComment ByteString
                    deriving (Show,Eq)                  
 newtype RefGroup = RefGroup ByteString
@@ -169,16 +195,17 @@ data Feature = Feature Key Location [(Qualifier,Value)]
                         
 newtype Key = Key ByteString
             deriving (Show,Eq)
+
 newtype Location = Location ByteString
                  deriving (Show,Eq)
+
 newtype Qualifier = Qualifier ByteString
                   deriving (Show,Eq)
+
 newtype Value = Value ByteString
                 deriving (Show,Eq)
                          
                       
-newtype DBCrossRef = DBCrossRef ByteString
-                     deriving (Show,Eq)
 
 data AssemblyInformation = AssemblyInformation
   { localSpan :: (Int,Int)
@@ -202,19 +229,5 @@ data DataClass = CON -- ^ Entry constructed from segment entry sequences;
                | STD -- ^ Standard (all entries not classified as above)
                deriving (Show,Eq)
 
-data Taxonomy = PHG -- ^ Bacteriophage
-              | ENV -- ^ Environmental Sample
-              | FUN -- ^ Fungal
-              | HUM -- ^ Human
-              | INV -- ^ Invertebrate
-              | MAM -- ^ Other Mammal
-              | VRT -- ^ Other Vertebrate
-              | MUS -- ^ Mus musculus
-              | PLN -- ^ Plant
-              | PRO -- ^ Prokaryote
-              | ROD -- ^ Other Rodent
-              | SYN -- ^ Synthetic
-              | TGN -- ^ Transgenic
-              | UNC -- ^ Unclassified
-              | VRL -- ^ Viral
-              deriving (Show,Eq)
+newtype Taxonomy = Taxonomy ByteString
+                 deriving (Show,Eq)

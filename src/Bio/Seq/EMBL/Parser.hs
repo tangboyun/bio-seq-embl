@@ -13,46 +13,36 @@
 -----------------------------------------------------------------------------
 
 module Bio.Seq.EMBL.Parser
-
        where
 
 import           Bio.Seq.EMBL.Parser.Internal
 import           Bio.Seq.EMBL.Types
 import           Control.Applicative
 import           Data.Attoparsec.ByteString.Char8
-import qualified Data.ByteString.Char8 as B8
-import           Data.Char hiding (isSpace,isDigit)
 import           Data.Maybe
-import           Prelude hiding (takeWhile)
 
 parseEMBL :: Parser SeqRecord
 parseEMBL = do
-  (acc,sv,topo,mol,dat,tax,len) <- parseID
+  idf <- parseID
   maybeXX
   accs <- parseAC
   maybeXX
   project <- optional $ parsePR <* maybeXX
-  cr <- lineDT1
-  lu <- lineDT2
-  maybeXX
-  des <- parseDE
-  maybeXX
-  kws <- parseKW
-  maybeXX
-  og <- parseOrganism
-  maybeXX
-  refs <- many1 $ parseRef <* maybeXX
-  dr <- optional $ parseDR <* maybeXX
+  dt <- optional $ parseDT <* maybeXX
+  des <- optional $ parseDE <* maybeXX
+  kws <- optional $ parseKW <* maybeXX
+  og <- optional $ parseOrganism <* maybeXX
+  refs <- optional $ many1 $ parseRef <* maybeXX
+  dr <- optional $ many1 $ parseDR <* maybeXX
   cc <- optional $ parseCC <* maybeXX
   asi <- optional $ parseASI <* maybeXX
-  fs <- parseFT
-  maybeXX
+  fs <- optional $ parseFT <* maybeXX
   sdata <- parseSQ <|> parseCS
   return $
-    SeqRecord acc sv topo mol dat tax len accs project
-              cr lu des kws og refs dr cc asi fs sdata
+    SeqRecord idf accs project
+              dt des kws og refs dr cc asi fs sdata
   
-    
-
-  
+parseEMBLs :: Parser [SeqRecord]
+parseEMBLs = many1 $ parseEMBL <* many space
+             
 

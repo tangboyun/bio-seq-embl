@@ -61,66 +61,53 @@ parseDC = "CON" .*> return CON <|>
           "STD" .*> return STD <?> 
           "Data Class"
 
-parseTAX = "PHG" .*> return PHG <|>
-           "ENV" .*> return ENV <|>
-           "FUN" .*> return FUN <|>
-           "HUM" .*> return HUM <|>
-           "INV" .*> return INV <|>
-           "MAM" .*> return MAM <|>
-           "VRT" .*> return VRT <|>
-           "MUS" .*> return MUS <|>
-           "PLN" .*> return PLN <|>
-           "PRO" .*> return PRO <|>
-           "ROD" .*> return ROD <|>
-           "SYN" .*> return SYN <|>
-           "TGN" .*> return TGN <|>
-           "UNC" .*> return UNC <|>
-           "VRL" .*> return VRL <?>
-           "Taxonomic Division"
+parseTAX = fmap (Taxonomy . B8.pack)  $
+           count 3 $ satisfy isUpper
 
 parseTOPO = "linear" .*> return Linear <|>
             "circular" .*> return Circular <?>
             "Topology"
-
+            
+-- ID   X56734; SV 1; linear; mRNA; STD; PLN; 1859 BP.
+-- ID   cel-let-7         standard; RNA; CEL; 99 BP.
 parseID = do
   _ <- mkHeader "ID" 
-  acc <- takeWhile1 (/= ';') <* char ';' <?> "Primary accession number" 
-  skipSpace
-  sv <- "SV" .*> skipSpace *>
-        (decimal <?> "Sequence version number" :: Parser Int) <* char ';' 
-  topo <- skipSpace *> parseTOPO <* char ';'
+  idf <- takeWhile1 (/= ' ') <* skipWhile (/= ';') <* char ';' <* skipSpace
+  sv <- optional $ "SV" .*> skipSpace *>
+        decimal <* char ';' 
+  topo <- optional $ skipSpace *> parseTOPO <* char ';'
   mol <- skipSpace *> takeWhile1 (/= ';') <*
-        char ';' <?> "Molecule type"
-  dat <- skipSpace *> parseDC <* char ';'
+         char ';'
+  dat <- optional $ skipSpace *> parseDC <* char ';'
   tax <- skipSpace *> parseTAX <* char ';'
-  len <- skipSpace *> (decimal :: Parser Int) <*
+  len <- skipSpace *> decimal <*
          skipSpace <*. "BP." <* endOfLine
-  return (acc,sv,topo,mol,dat,tax,len)
+  return $ ID idf sv topo mol dat tax len
   
-parseDT = do
-  mkHeader "DT" *>
-    takeWhile1 (/= ' ') <* skipSpace
-
-lineDT1 = do
-  str1 <- fmap B8.unpack parseDT
-  relNum <- fmap Release $
-            "(Rel." .*> skipSpace *> decimal <* char ',' <*
-            skipSpace <*. "Created)" <* endOfLine
-  case toTime str1 of
-    Nothing -> fail "Not a valid time string"
-    Just t -> return (t,relNum)
-  
-lineDT2 = do
-  str2 <- fmap B8.unpack parseDT
-  relNum <- fmap Release $
-            "(Rel." .*> skipSpace *> decimal <* char ',' <*
-            skipSpace <*. "Last updated,"
-  verNum <- fmap Version $
-            skipSpace *> "Version" .*> skipSpace *> decimal <*
-            char ')' <* endOfLine
-  case toTime str2 of
-    Nothing -> fail "Not a valid time string"
-    Just t -> return (t,relNum,verNum)
+parseDT = Date <$> lineDT1 <*> lineDT2
+  where 
+    parseTimeStr =
+      mkHeader "DT" *>
+      takeWhile1 (/= ' ') <* skipSpace
+    lineDT1 = do
+      str1 <- fmap B8.unpack parseTimeStr
+      relNum <- fmap Release $
+                "(Rel." .*> skipSpace *> decimal <* char ',' <*
+                skipSpace <*. "Created)" <* endOfLine
+      case toTime str1 of
+        Nothing -> fail "Not a valid time string"
+        Just t -> return (t,relNum)
+    lineDT2 = do
+      str2 <- fmap B8.unpack parseTimeStr
+      relNum <- fmap Release $
+                "(Rel." .*> skipSpace *> decimal <* char ',' <*
+                skipSpace <*. "Last updated,"
+      verNum <- fmap Version $
+                skipSpace *> "Version" .*> skipSpace *> decimal <*
+                char ')' <* endOfLine
+      case toTime str2 of
+        Nothing -> fail "Not a valid time string"
+        Just t -> return (t,relNum,verNum)
 
 parseDE = do
   fmap (B8.intercalate " ") $
@@ -175,27 +162,53 @@ parseAC = do
     char ';' <* endOfLine
   
 parsePaper = do
-  (pub,vol,iss,pBeg,pEnd,y) <- mkHeader "RL" *> parseJ
-  return $ Paper pub vol iss (pBeg,pEnd) y
+  (pub,vol,iss,pg,y) <- mkHeader "RL" *> parseJ
+  return $ Paper pub vol iss pg y
 
 parseMisc = do
-  (pub,vol,iss,pBeg,pEnd,y) <- mkHeader "RL" *> "(misc) " .*> parseJ
-  return $ Misc pub vol iss (pBeg,pEnd) y
+  (pub,vol,iss,pg,y) <- mkHeader "RL" *> "(misc) " .*> parseJ
+  return $ Misc pub vol iss pg y
+  
+parseEpub = do
+  pub <- fmap (Publication . B8.intercalate " ") $
+         mkHeader "RL" *>
+         word `sepBy1` char ' '
+  y <- char ' ' *> "[Epub prior to print]" .*>
+       char '(' *> decimal <* char ')' <*
+       char '.' <* endOfLine
+  return $ Epub pub y
+  where 
+    word = takeWhile1
+           (\c ->
+             isAlpha_ascii c ||
+             isDigit c ||
+             c == '.' ||
+             c == '(' ||
+             c == ')') <*
+           (do
+               c1 <- peekChar
+               case c1 of
+                 Just ' ' -> return ()
+                 _ -> fail "Not word boundary")
   
 parseJ = do
   pub <- fmap (Publication . B8.intercalate " ") $
          word `sepBy1` char ' '
-  vol <- char ' ' *> decimal
+  vol <- char ' ' *> option 0 decimal
   iss <- optional $
          char '(' *> decimal <* char ')'
-  pBeg <- char ':' *> decimal <* char '-'
-  pEnd <- decimal
+  pg <- char ':' *> takeWhile1 (/= '(')
   y    <- char '(' *> decimal <* char ')' <*
           char '.' <* endOfLine
-  return (pub,vol,iss,pBeg,pEnd,y)
+  return (pub,vol,iss,pg,y)
   where 
     word = takeWhile1
-           (\c -> isAlpha_ascii c || isDigit c || c == '.') <*
+           (\c ->
+             isAlpha_ascii c ||
+             isDigit c ||
+             c == '.' ||
+             c == '(' ||
+             c == ')') <*
            (do
                c1 <- peekChar
                case c1 of
@@ -211,14 +224,13 @@ parseBook = do
               mkHeader "RL" *>
               (takeWhile (\c -> c /= ':' && c /= '\n') `sepBy1`
                (endOfLine <* mkHeader "RL")) <* char ':'
-  pBeg <- decimal <* char '-'
-  pEnd <- decimal <* char ';' <* endOfLine
+  pg <- takeWhile1 (/= ';') <* char ';' <* endOfLine
   puber <- fmap (Publisher . trim . B8.intercalate " ") $
            mkHeader "RL" *>
            takeWhile (\c -> c /= '(' && c /= '\n') `sepBy1`
            (endOfLine <* mkHeader "RL")
   y <- char '(' *> decimal <* char ')' <* char '.' <* endOfLine
-  return $ Book bookName auths puber (pBeg,pEnd) y
+  return $ Book bookName auths puber pg y
   where
     as = takeWhile (\c -> c /= ',' && c /= ';') `sepBy1` string ", "
     
@@ -249,6 +261,10 @@ parseUnpublished = do
   mkHeader "RL" *> "Unpublished" .*>
     char '.' *> endOfLine *> return Unpublished
 
+parseOther = do
+  fmap (Other . B8.init . B8.intercalate " ") $
+    mkHeader "RL" *> takeWhile1 (/= '\n') `sepBy1` (endOfLine *> mkHeader "RL") <* endOfLine
+  
 parsePatent = do
   patNum <- fmap PatentNumber $
             mkHeader "RL" *>
@@ -271,7 +287,8 @@ parseRN = do
 
 parseRC = do
   fmap (B8.intercalate " ") $
-    (mkHeader "RC" *> takeWhile1 (/= '\n') `sepBy1` endOfLine) <* endOfLine
+    mkHeader "RC" *> takeWhile1 (/= '\n') `sepBy1`
+    (endOfLine *> mkHeader "RC") <* endOfLine
 
 parseRP :: Parser [(Int,Int)]
 parseRP =
@@ -288,51 +305,42 @@ parseRP =
 
 
 parseRX = do
-  mkHeader "RX" *> parseResource <* endOfLine 
-  where
-    parseResource = parsePUBMED <|>
-                    parseDOI <|>
-                    parseAGRICOLA <?> "reference cross-reference"
-      where
-        parsePUBMED = fmap PUBMED
-                      ("PUBMED" .*> string "; " *>
-                       (takeWhile1 isDigit <?> "Invalid PMID") <*
-                       char '.')
-        parseDOI = fmap (DOI . B8.init)
-                   ("DOI" .*> string "; " *>
-                    (takeWhile1 (/= '\n')))
-        parseAGRICOLA = fmap (AGRICOLA . B8.init)
-                        ("AGRICOLA" .*> string "; " *>
-                         (takeWhile1 (/= '\n')))
-    
+  Resource <$> (mkHeader "RX" *> takeWhile1 isUpper <* string "; ")
+           <*> fmap B8.init (takeWhile1 (/= '\n') <* endOfLine)
+  
 parseRG = do
   mkHeader "RG" *> takeWhile1 (/= '\n') <* endOfLine
-
-
-parseRA = do
-  fmap concat $
-    goRA `sepBy1` string ",\n" <* char ';' <* endOfLine
-  where
-    goRA = do
-      mkHeader "RA" *>
-        takeWhile1
-        (\c -> c /= ',' && c /= '\n' && c /= ';') `sepBy1`
-        string ", "
-
+  
+parseRA = mkHeader "RA" *> 
+          oneAuthor `sepBy1`
+          (char ',' *> space <* (optional $ mkHeader "RA")) <*
+          char ';' <* endOfLine
+  where 
+    oneAuthor = fmap (B8.intercalate " ") $
+                takeWhile1
+                (\c -> c /= ',' && c /= '\n' && c /= ';' && c /= ' ') `sepBy1`
+                (string " " <|> (fmap B8.pack $ endOfLine *> mkHeader "RA"))
 
 parseRT = empLine <|>
           oneLine <|>
           mulLine <?> "Reference Title"
   where
-    empLine = mkHeader "RT" *> char ';' *> endOfLine *> return ""
+    empLine = mkHeader "RT" *> optional (char '"') *> char ';' *> endOfLine *> return ""
     oneLine = mkHeader "RT" *> char '"' *>
-              takeWhile1 (\c -> c /= '\n' && c /= '"') <*
+              title <*
               char '"' <* char ';' <* endOfLine
     mulLine = fmap (trim . B8.intercalate " ") $
               mkHeader "RT" *> char '"' *>
-              (takeWhile (\c -> c /= '"' && c /= '\n') `sepBy1`
+              (title `sepBy1`
                (endOfLine *> mkHeader "RT")) <*
               char '"' <* char ';' <* endOfLine
+    title = fmap B8.pack $ many $
+            satisfy (\c -> c /= '"' && c /= '\n') <|>
+            (char '"' <* (do
+                            next <- peekChar
+                            case next of
+                              Just ';' -> fail "title end"
+                              _ -> return ()))
               
     
 parseRL :: Parser RefLoc
@@ -341,8 +349,10 @@ parseRL = parsePaper <|>
           parsePatent <|>
           parseUnpublished <|>
           parseMisc <|>
+          parseEpub <|>
           parseBook <|>
-          parseThesis <?> "Reference Location"
+          parseThesis <|>
+          parseOther <?> "Reference Location"
 
 
 -- | Legal Char in Feature key and qualifier
@@ -395,16 +405,25 @@ parseFT = do
       q <- fmap Qualifier $
            mkHeader "FT" *> count 16 (satisfy (== ' ')) *>
            char '/' *> legalName
-      v <- fmap (Value . B8.intercalate " ") $
+      let func = case q of
+            Qualifier "translation" -> B8.concat
+            _ -> B8.intercalate " "
+
+      v <- fmap (Value . func) $
            char '=' *> (takeWhile1 (/= '\n') `sepBy1`
                         (endOfLine *> conFTLine)) <*
            endOfLine
       return (q,v)
-
+      
     lineFH = "FH" .*> takeWhile (/= '\n') *> endOfLine
 
                                       
-parseDR = mkHeader "DR" *> takeWhile (/= '.') <* char '.' <* endOfLine
+parseDR = do
+  db <- fmap Database $ mkHeader "DR" *> takeWhile (/= ';')
+  pID <- char ';' *> char ' ' *> takeWhile1 (/= ';') <* char ';' <* char ' '
+  sID <- optional $ takeWhile1 (/= '.')
+  _ <- char '.' *> endOfLine
+  return $ DBCrossRef db pID sID
 
 parseASI = do
   lineAH *>
@@ -441,13 +460,13 @@ parseOrganism = do
 parseRef :: Parser Reference
 parseRef = do
   rn <- fmap RefNo parseRN
-  rc <- optional $ fmap RefComment parseRC
   rp <- optional $ parseRP
-  rx <- optional $ parseRX
+  rx <- optional $ many1 parseRX
   rg <- optional $ fmap RefGroup $ parseRG
   as <- fmap (map Author) parseRA
   title <- fmap Title parseRT
   rl <- parseRL
+  rc <- optional $ fmap RefComment parseRC
   return $ Reference rn rc rp rx rg as title rl
 
  
@@ -475,7 +494,7 @@ parseSQ = do
 
 -- | A very fast predicate for the official IUPAC-IUB single-letter base codes.
 -- @
---    isIUPAC w == toEnum w `elem` "ABCDGHKMNRSTVWYabcdghkmnrstvwy"
+--    isIUPAC w == toEnum w `elem` "ABCDGHKMNRSTUVWYabcdghkmnrstuvwy"
 -- @
 isIUPAC :: Word8 -> Bool
 isIUPAC w | pre <= 25 = unsafeShiftL (1 :: Int32)
@@ -484,8 +503,9 @@ isIUPAC w | pre <= 25 = unsafeShiftL (1 :: Int32)
   where
     pre = (w .|. 32) - 97 -- toLower w - ord 'a'
     iupacMask :: Int32
-    iupacMask = 23999695
+    iupacMask = 25048271
     -- iupacMask = foldr1 (.|.) $
     --             map (unsafeShiftL 1 . (\n -> n - 97) . ord . toLower)
-    --             "ABCDGHKMNRSTVWY"
+    --             "ABCDGHKMNRSTUVWY"
 {-# INLINE isIUPAC #-}
+
