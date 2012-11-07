@@ -22,7 +22,10 @@ import qualified Data.ByteString.Lazy.Builder as B8
 import Data.ByteString.Lazy (ByteString)
 import Control.Exception
 import Data.Monoid
-type Unparseable = Maybe ByteString
+import Data.List.Split
+import Data.List
 
-readEMBL :: FilePath -> IO ([SeqRecord],Unparseable)
-readEMBL fp = do
+-- toSeqRecord :: ByteString -> [SeqRecord]
+-- toSeqRecord str =
+toEMBLs = map (B8.toStrict . B8.unlines) .
+          split (keepDelimsR $ whenElt (== "//")) . B8.lines
