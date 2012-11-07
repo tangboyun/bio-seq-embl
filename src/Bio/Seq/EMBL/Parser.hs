@@ -20,6 +20,7 @@ import           Bio.Seq.EMBL.Types
 import           Control.Applicative
 import           Data.Attoparsec.ByteString.Char8
 import           Data.Maybe
+import qualified Data.ByteString.Char8 as B8
 
 parseEMBL :: Parser SeqRecord
 parseEMBL = do
@@ -43,6 +44,6 @@ parseEMBL = do
               dt des kws og refs dr cc asi fs sdata
   
 parseEMBLs :: Parser [SeqRecord]
-parseEMBLs = many1 $ parseEMBL <* many space
+parseEMBLs = parseEMBL `sepBy1` endOfLine <* optional endOfLine
              
 

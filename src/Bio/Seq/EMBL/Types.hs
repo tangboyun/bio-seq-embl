@@ -97,11 +97,6 @@ data RefLoc where
     , year :: {-# UNPACK #-} !Int
     } -> RefLoc
     
-  Epub :: 
-    { journal :: Publication
-    , year :: {-# UNPACK #-} !Int
-    } -> RefLoc -- ^ [Epub prior to print]
-    
   Book ::
     { book :: Publication
     , authors :: [Author]
@@ -140,7 +135,7 @@ data RefLoc where
     } -> RefLoc
   Other ::
     { otherRefLoc :: ByteString
-    } -> RefLoc
+    } -> RefLoc -- ^ Epub,URL,etc.
    deriving (Show,Eq)
 
 data SeqStatistic = SeqSta 

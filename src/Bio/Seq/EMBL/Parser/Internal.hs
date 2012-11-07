@@ -169,28 +169,6 @@ parseMisc = do
   (pub,vol,iss,pg,y) <- mkHeader "RL" *> "(misc) " .*> parseJ
   return $ Misc pub vol iss pg y
   
-parseEpub = do
-  pub <- fmap (Publication . B8.intercalate " ") $
-         mkHeader "RL" *>
-         word `sepBy1` char ' '
-  y <- char ' ' *> "[Epub prior to print]" .*>
-       char '(' *> decimal <* char ')' <*
-       char '.' <* endOfLine
-  return $ Epub pub y
-  where 
-    word = takeWhile1
-           (\c ->
-             isAlpha_ascii c ||
-             isDigit c ||
-             c == '.' ||
-             c == '(' ||
-             c == ')') <*
-           (do
-               c1 <- peekChar
-               case c1 of
-                 Just ' ' -> return ()
-                 _ -> fail "Not word boundary")
-  
 parseJ = do
   pub <- fmap (Publication . B8.intercalate " ") $
          word `sepBy1` char ' '
@@ -313,13 +291,14 @@ parseRG = do
   
 parseRA = mkHeader "RA" *> 
           oneAuthor `sepBy1`
-          (char ',' *> space <* (optional $ mkHeader "RA")) <*
+          (char ',' *> many1 (satisfy (\c -> c == ' ' || c == '\n')) <*
+           (optional $ mkHeader "RA")) <*
           char ';' <* endOfLine
   where 
     oneAuthor = fmap (B8.intercalate " ") $
                 takeWhile1
                 (\c -> c /= ',' && c /= '\n' && c /= ';' && c /= ' ') `sepBy1`
-                (string " " <|> (fmap B8.pack $ endOfLine *> mkHeader "RA"))
+                ((fmap B8.pack $ many1 $ char ' ') <|> (fmap B8.pack $ endOfLine *> mkHeader "RA"))
 
 parseRT = empLine <|>
           oneLine <|>
@@ -349,7 +328,6 @@ parseRL = parsePaper <|>
           parsePatent <|>
           parseUnpublished <|>
           parseMisc <|>
-          parseEpub <|>
           parseBook <|>
           parseThesis <|>
           parseOther <?> "Reference Location"

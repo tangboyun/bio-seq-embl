@@ -8,3 +8,4 @@ emblFormat.txt
 /FT_current.html
 /src/Bio/Seq/EMBL/Parser_flymake.hs
 /src/Bio/Seq/EMBL_flymake.hs
+/src/test
