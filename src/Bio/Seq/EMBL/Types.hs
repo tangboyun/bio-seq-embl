@@ -18,33 +18,22 @@ module Bio.Seq.EMBL.Types
 
 import Data.ByteString (ByteString)
 import Data.Time
-
-data Resource = Resource
-  { resource :: ByteString
-  , resourceIdx :: ByteString
+                       
+data EMBL = EMBL 
+  { identification :: Identification
+  , accessions :: [ByteString]
+  , project :: Maybe ByteString
+  , date :: Maybe Date
+  , description :: Maybe ByteString
+  , keywords :: Maybe [Keyword]
+  , organism :: Maybe Organism
+  , references :: Maybe [Reference]
+  , dbCrossRef :: Maybe [DBCrossRef]
+  , comment :: Maybe ByteString
+  , assemblyInformation :: Maybe [AssemblyInformation]
+  , features :: Maybe [Feature]
+  , seqdata :: SeqData
   } deriving (Show,Eq)
-                       
-data Topology = Circular
-              | Linear
-              deriving (Show,Eq)
-                       
-data SeqRecord where
-  SeqRecord ::
-    { identification :: Identification
-    , accessions :: [ByteString]
-    , project :: Maybe ByteString
-    , date :: Maybe Date
-    , description :: Maybe ByteString
-    , keywords :: Maybe [Keyword]
-    , organism :: Maybe Organism
-    , references :: Maybe [Reference]
-    , dbCrossRef :: Maybe [DBCrossRef]
-    , comment :: Maybe ByteString
-    , assemblyInformation :: Maybe [AssemblyInformation]
-    , features :: Maybe [Feature]
-    , seqdata :: SeqData
-    } -> SeqRecord
-    deriving (Show,Eq)
 
 data Identification = ID
   { identifier :: ByteString
@@ -56,7 +45,6 @@ data Identification = ID
   , seqlength :: Int
   } deriving (Show,Eq)
   
-    
 data Date = Date 
   { created :: (UTCTime,Release)
   , lastUpdated :: (UTCTime,Release,Version)
@@ -75,18 +63,21 @@ data Organism = Oranism
   , organelle :: Maybe ByteString
   } deriving (Show,Eq)
   
-data Reference where
-  Reference ::
-    { refNo :: RefNo
-    , refComment :: Maybe RefComment
-    , refPosition :: Maybe [(Int,Int)]
-    , refSource :: Maybe [Resource]
-    , refGroup :: Maybe RefGroup
-    , refAuthors :: [Author]
-    , refTitle :: Title
-    , refLocation :: RefLoc
-    } -> Reference
-  deriving (Show,Eq)
+data Reference = Reference 
+  { refNo :: RefNo
+  , refComment :: Maybe RefComment
+  , refPosition :: Maybe [(Int,Int)]
+  , refSource :: Maybe [Resource]
+  , refGroup :: Maybe RefGroup
+  , refAuthors :: [Author]
+  , refTitle :: Title
+  , refLocation :: RefLoc
+  } deriving (Show,Eq)
+
+data Resource = Resource
+  { resource :: ByteString
+  , resourceIdx :: ByteString
+  } deriving (Show,Eq)
 
 data RefLoc where
   Paper ::
@@ -117,8 +108,7 @@ data RefLoc where
     { school :: Address
     , year :: {-# UNPACK #-} !Int
     } -> RefLoc
-    
-  Patent ::
+  Patent :: 
     { patentNumber :: PatentNumber
     , patentType :: PatentType
     , serialNumber :: Int
@@ -135,7 +125,7 @@ data RefLoc where
     } -> RefLoc
   Other ::
     { otherRefLoc :: ByteString
-    } -> RefLoc -- ^ Epub,URL,etc.
+    } -> RefLoc -- Epub,URL,etc.
    deriving (Show,Eq)
 
 data SeqStatistic = SeqSta 
@@ -143,7 +133,7 @@ data SeqStatistic = SeqSta
   , numOfC :: {-# UNPACK #-} !Int
   , numOfG :: {-# UNPACK #-} !Int
   , numOfT :: {-# UNPACK #-} !Int
-  , numOfOthers :: {-# UNPACK #-} !Int
+  , numOfO :: {-# UNPACK #-} !Int
   } deriving (Show,Eq)
 
 newtype Version = Version Int
@@ -209,9 +199,14 @@ data AssemblyInformation = AssemblyInformation
   , isComplementary :: Bool
   } deriving (Show,Eq)
 
+
+data Topology = Circular
+              | Linear
+              deriving (Show,Eq)
+
 data DataClass = CON -- ^ Entry constructed from segment entry sequences;
-                     -- ^ if unannotated, annotation may be drawn from
-                     -- ^ segment entries
+                     -- if unannotated, annotation may be drawn from
+                     -- segment entries
                | PAT -- ^ Patent
                | EST -- ^ Expressed Sequence Tag
                | GSS -- ^ Genome Survey Sequence
@@ -226,3 +221,6 @@ data DataClass = CON -- ^ Entry constructed from segment entry sequences;
 
 newtype Taxonomy = Taxonomy ByteString
                  deriving (Show,Eq)
+    
+                          
+

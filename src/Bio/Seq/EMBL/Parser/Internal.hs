@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, PatternGuards #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module : Low-level Parser, Ugly & Unstable
@@ -456,7 +456,7 @@ parseCS = do
     lineTM
 
 parseSQ = do
-  _ <- mkHeader "SQ" *> "Sequence " .*> decimal <*. " BP;"
+  _ <- mkHeader "SQ" *> "Sequence " .*> (decimal :: Parser Int) <*. " BP;"
   aNum <- char ' ' *> decimal <*. " A;"
   cNum <- char ' ' *> decimal <*. " C;"
   gNum <- char ' ' *> decimal <*. " G;"
@@ -465,25 +465,8 @@ parseSQ = do
   sdata <- fmap (B8.concat . concat) $
            many1 $
            count 5 (char ' ') *>
-           (takeWhile1 (isIUPAC . fromIntegral . ord) `sepBy1` char ' ') <*
+           (takeWhile1 isAlpha_ascii `sepBy1` char ' ') <*
            skipSpace <* many1 digit <* endOfLine
   lineTM
   return (SQ (SeqSta aNum cNum gNum tNum oNum) sdata) <?> "Sequence Data"
-
--- | A very fast predicate for the official IUPAC-IUB single-letter base codes.
--- @
---    isIUPAC w == toEnum w `elem` "ABCDGHKMNRSTUVWYabcdghkmnrstuvwy"
--- @
-isIUPAC :: Word8 -> Bool
-isIUPAC w | pre <= 25 = unsafeShiftL (1 :: Int32)
-                         (fromIntegral pre) .&. iupacMask /= 0
-          | otherwise = False
-  where
-    pre = (w .|. 32) - 97 -- toLower w - ord 'a'
-    iupacMask :: Int32
-    iupacMask = 25048271
-    -- iupacMask = foldr1 (.|.) $
-    --             map (unsafeShiftL 1 . (\n -> n - 97) . ord . toLower)
-    --             "ABCDGHKMNRSTUVWY"
-{-# INLINE isIUPAC #-}
 
