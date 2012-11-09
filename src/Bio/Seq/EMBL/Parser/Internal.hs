@@ -432,7 +432,7 @@ parseOrganism = do
   cs <- parseOC
   maybeXX
   og <- optional parseOG
-  return $ Oranism name cName cs og
+  return $ Organism name cName cs og
   
 
 parseRef :: Parser Reference
