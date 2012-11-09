@@ -16,6 +16,7 @@ module Bio.Seq.EMBL
        (
          extractEMBL
        , extractUnparseable
+       , readEMBL
        , module Bio.Seq.EMBL.Parser
        , module Bio.Seq.EMBL.Types
        -- * References
@@ -53,18 +54,14 @@ splitEMBL str =  if B8.null str
 {-# INLINE splitEMBL #-}
 
 -- | Extract `EMBL` record from a lazy `ByteString` , unparseable parts will be
--- thrown away. You can simply define a function to read embl file.
---
--- @
---    Data.ByteString.Lazy.Char8.readFile fp >>= return . extractSeqRecord
--- @
---
+-- thrown away.
 extractEMBL :: ByteString -> [EMBL]
 extractEMBL =
   catMaybes .
   map (maybeResult .
        parse parseEMBL) . splitEMBL
-  
+
+readEMBL fp = B8.readFile fp >>= return . extractEMBL
 
 -- | Lazily extract unparseable record from a large embl file,
 --  mainly for debugging purposes.
