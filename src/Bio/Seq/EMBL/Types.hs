@@ -18,7 +18,7 @@ module Bio.Seq.EMBL.Types
 
 import Data.ByteString (ByteString)
 import Data.Time
-                       
+
 data EMBL = EMBL 
   { identification :: Identification
   , accessions :: [ByteString]
@@ -56,7 +56,7 @@ data DBCrossRef = DBCrossRef
   , secondaryID :: Maybe ByteString
   } deriving (Show,Eq)
              
-data Organism = Oranism
+data Organism = Organism
   { name :: ByteString
   , commonName :: Maybe ByteString
   , classification :: [ByteString]
