@@ -30,7 +30,7 @@ parseEMBL = do
   maybeXX
   accs <- parseAC
   maybeXX
-  project <- optional $ parsePR <* maybeXX
+  proj <- optional $ parsePR <* maybeXX
   dt <- optional $ parseDT <* maybeXX
   des <- optional $ parseDE <* maybeXX
   kws <- optional $ parseKW <* maybeXX
@@ -42,7 +42,7 @@ parseEMBL = do
   fs <- optional $ parseFT <* maybeXX
   sdata <- parseSQ <|> parseCS
   return $
-    EMBL idf accs project
+    EMBL idf accs proj
          dt des kws og refs dr cc asi fs sdata
   
 

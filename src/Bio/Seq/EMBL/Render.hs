@@ -27,6 +27,7 @@ import System.Locale
 import Data.Time
 import Data.Maybe
 
+timeFMT = "%d-%b-%Y"
 renderB = render :: ByteString -> Builder
 
 renderAcc = splitToLines "AC" "; " ";\n" "" . accessions
@@ -130,8 +131,7 @@ instance Render Date where
     render (formatTime defaultTimeLocale timeFMT t2) <>
     renderB " (" <> render r2 <> renderB ", Last updated, " <>
     render ver <> renderB ")"
-    where
-      timeFMT = "%d-%b-%Y"
+
 
 instance Render Organism where
   render (Organism na com cl og) =
@@ -156,14 +156,87 @@ instance Render RefComment where
   render (RefComment com) =
     splitToLines "RC" " " "\n" "" $ B8.words com
 
+instance Render Resource where
+  render (Resource re reIdx) =
+    mkHeader "RX" <> render re <>
+    renderB "; " <> render reIdx <>
+    renderB "."
+
+instance Render [Resource] where
+  render = intercalate "\n" . map render
+
+instance Render RefGroup where
+  render (RefGroup str) =
+    splitToLines "RG" " " "\n" "" $ B8.words str
+
+
+instance Render [Author] where
+  render as =
+    splitToLines "RA" ", " ",\n" ";" $
+    map (\(Author au) -> au) as
+
+instance Render Title where
+  render (Title t) =
+    case t of
+      "" -> mkHeader "RT" <> renderB "."
+      _ -> splitToLines "RT" " " "\n" "" $
+           B8.words $
+           "\"" <> t <> "\""
+
+
+instance Render RefLoc where
+  render (Paper (Publication name) v i p y) =
+    mkHeader "RL" <> render name <> renderB " " <>
+    render v <> render (fmap (("(" <>) . (<> ")") . show) i) <>
+    renderB ":" <> render p <>
+    render (fmap (("(" <>) . (<> ")") . show) y) <> renderB "."
+
+  render (Book (Publication name) as (Publisher pb) p y) =
+    let auB = (mkHeader "RL" <>) . (renderB "(in) " <>) .
+              (<> renderB ";") .
+              (intercalate ",\nRL   ") .
+              map (render . B8.intercalate ", ") .
+              splitOnLineLimit .
+              map (\(Author a) -> a) $ as
+        naB = splitToLines "RL" " " "\n" ";" $
+              B8.words $ name <> ":" <> p
+        puB = splitToLines "RL" " " "\n"
+              ("(" <> B8.pack (show y) <> ").") $
+              B8.words pb
+    in intercalate "\n" [auB,naB,puB]
+
+  render (Submitted t (Database db) ad) =
+    let str = if B8.count '/' db > 1
+              then " databases."
+              else " database."
+        daB = mkHeader "RL" <>
+              renderB "Submitted (" <>
+              render (formatTime defaultTimeLocale timeFMT t) <>
+              renderB ") to the " <> render db <> render str
+        adB = fromMaybe mempty $
+              fmap (splitToLines "RL" " " "\n" "" .
+                    B8.words . (\(Address a) -> a)) ad
+    in intercalate "\n" [daB,adB]
+
+  render 
+              
+       
 instance Render Reference where
   render ref =
     zipWith ($)
     [render . refNo
     ,render . refComment
-    ,fromMaybe mempty . fmap (mkHeader "" <>   。 map (\(a,b) -> render a <>
-                                             renderB "-" <>
-                                             render b
-                                  ) . refPosition
+    ,fromMaybe mempty .
+     fmap (mkHeader "RP" <>) 。
+     intercalate ", " .
+     map (\(a,b) -> render a <>
+                    renderB "-" <>
+                    render b
+         ) . refPosition
+    ,render . refSource
+    ,render . refGroup
+    ,render . refAuthors
+    ,
+
     
     

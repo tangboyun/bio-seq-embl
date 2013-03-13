@@ -17,6 +17,7 @@ module Bio.Seq.EMBL
          extractEMBL
        , extractUnparseable
        , readEMBL
+       , splitEMBL
        , module Bio.Seq.EMBL.Parser
        , module Bio.Seq.EMBL.Types
        -- * References
@@ -32,7 +33,6 @@ import qualified Data.ByteString.Lazy.Char8 as B8
 import qualified Data.ByteString.Lazy.Builder as B8
 import Data.ByteString.Lazy (ByteString)
 import Data.Monoid
-import Data.List.Split
 import Data.Maybe
 
 splitEMBL :: ByteString -> [ByteString]
@@ -41,15 +41,17 @@ splitEMBL str =  if B8.null str
                  else go $ B8.findIndices (== '/') str
   where
     go [] = []
-    go [i] = []
+    go (_:[]) = []
     go (i:j:is) =
       if j - i == 1
-      then let (lhs,rhs) = B8.splitAt (j+1) str
-               remain =
-                 case B8.dropWhile (/= '\n') rhs of
-                   "" -> ""
-                   re -> B8.tail re
-           in lhs : splitEMBL remain
+      then if i > 1 && B8.index str (i-1) == '\n'
+           then let (lhs,rhs) = B8.splitAt (j+1) str
+                    remain =
+                        case B8.dropWhile (/= '\n') rhs of
+                            "" -> ""
+                            re -> B8.tail re
+                in lhs : splitEMBL remain
+           else go is
       else go (j:is)
 {-# INLINE splitEMBL #-}
 
@@ -61,6 +63,7 @@ extractEMBL =
   map (maybeResult .
        parse parseEMBL) . splitEMBL
 
+readEMBL :: FilePath -> IO [EMBL]
 readEMBL fp = B8.readFile fp >>= return . extractEMBL
 
 -- | Lazily extract unparseable record from a large embl file,
@@ -68,7 +71,10 @@ readEMBL fp = B8.readFile fp >>= return . extractEMBL
 extractUnparseable :: ByteString -> ByteString
 extractUnparseable =
   B8.toLazyByteString .
-  foldr (\a b -> B8.lazyByteString a `mappend` b) mempty .
+  foldr (\a b ->
+          B8.lazyByteString a `mappend`
+          B8.byteString "\n" `mappend`
+          b) mempty .
   filter (isNothing . maybeResult .
           parse parseEMBL) . splitEMBL
 

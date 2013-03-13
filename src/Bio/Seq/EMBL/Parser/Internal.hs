@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings, PatternGuards #-}
+{-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module : Low-level Parser, Ugly & Unstable
@@ -19,7 +20,6 @@ module Bio.Seq.EMBL.Parser.Internal
 import           Bio.Seq.EMBL.Types
 import           Control.Applicative
 import           Data.Attoparsec.ByteString.Char8
-import           Data.Bits
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as B8
 import           Data.Char hiding (isSpace,isDigit)
@@ -42,7 +42,7 @@ trim str = if (== ' ') $ B8.last str
 mkHeader :: ByteString -> Parser String
 mkHeader str = str .*> count 3 (satisfy (== ' ')) <?>
                (B8.unpack str ++ " Line")
-
+               
 maybeXX = option "" (fmap B8.concat $ many1 lineXX) *> return ()
 
 lineXX = "XX" .*> takeWhile (/= '\n') <* endOfLine
@@ -128,7 +128,7 @@ parseOS = do
   des <- fmap (B8.intercalate " ") $
          (fmap trim $ takeWhile1 (\c -> c /= '(' && c /= '\n')) `sepBy1`
          (endOfLine <* mkHeader "OS")
-  name <- optional $
+  ogname <- optional $
           -- can handle "OS   Trifolium repens\nOS   (white\nOS   clover)\n"
           fmap (B8.intercalate " ") $
           ((endOfLine *> mkHeader "OS" *> char '(' *>
@@ -137,7 +137,7 @@ parseOS = do
            (char '(' *> (takeWhile1 (\c -> c /= ')' && c /= '\n') `sepBy1`
                          (endOfLine <* mkHeader "OS")) <* char ')'))
   endOfLine
-  return (des,name)
+  return (des,ogname)
 
 parseOC = do
   fmap concat $
@@ -428,11 +428,11 @@ parseASI = do
     lineAH = "AH" .*> takeWhile (/= '\n') *> endOfLine
 
 parseOrganism = do
-  (name,cName) <- parseOS
+  (ogname,cName) <- parseOS
   cs <- parseOC
   maybeXX
   og <- optional parseOG
-  return $ Organism name cName cs og
+  return $ Organism ogname cName cs og
   
 
 parseRef :: Parser Reference
