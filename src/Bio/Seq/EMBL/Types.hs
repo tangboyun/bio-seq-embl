@@ -25,7 +25,7 @@ data EMBL = EMBL
   , project :: Maybe ByteString
   , date :: Maybe Date
   , description :: Maybe ByteString
-  , keywords :: Maybe [Keyword]
+  , keywords :: Maybe [ByteString]
   , organism :: Maybe Organism
   , references :: Maybe [Reference]
   , dbCrossRef :: Maybe [DBCrossRef]
@@ -41,7 +41,7 @@ data Identification = ID
   , topology :: Maybe Topology
   , moleculeType :: ByteString
   , dataClass :: Maybe DataClass
-  , taxonomy :: Taxonomy
+  , taxonomy :: ByteString
   , seqlength :: Int
   } deriving (Show,Eq)
   
@@ -51,7 +51,7 @@ data Date = Date
   } deriving (Show,Eq)
 
 data DBCrossRef = DBCrossRef
-  { externalDB :: Database
+  { externalDB :: ByteString
   , primaryID :: ByteString
   , secondaryID :: Maybe ByteString
   } deriving (Show,Eq)
@@ -65,12 +65,12 @@ data Organism = Organism
   
 data Reference = Reference 
   { refNo :: RefNo
-  , refComment :: Maybe RefComment
+  , refComment :: Maybe ByteString
   , refPosition :: Maybe [(Int,Int)]
   , refSource :: Maybe [Resource]
-  , refGroup :: Maybe RefGroup
-  , refAuthors :: [Author]
-  , refTitle :: Title
+  , refGroup :: Maybe ByteString
+  , refAuthors :: [ByteString]
+  , refTitle :: ByteString
   , refLocation :: RefLoc
   } deriving (Show,Eq)
 
@@ -81,7 +81,7 @@ data Resource = Resource
 
 data RefLoc where
   Paper ::
-    { journal :: Publication
+    { journal :: ByteString
     , volume :: {-# UNPACK #-} !Int
     , issue :: Maybe Int
     , pages :: ByteString
@@ -89,35 +89,35 @@ data RefLoc where
     } -> RefLoc
     
   Book ::
-    { book :: Publication
-    , authors :: [Author]
-    , publisher :: Publisher
+    { book :: ByteString
+    , authors :: [ByteString]
+    , publisher :: ByteString 
     , pages :: ByteString
     , year :: {-# UNPACK #-} !Int
     } -> RefLoc
     
   Submitted ::
     { submitDate :: UTCTime
-    , database :: Database
-    , address :: Maybe Address
+    , database :: ByteString
+    , address :: Maybe ByteString
     } -> RefLoc
     
   Unpublished :: RefLoc
   
   Thesis ::
-    { school :: Address
+    { school :: ByteString
     , year :: {-# UNPACK #-} !Int
     } -> RefLoc
   Patent :: 
-    { patentNumber :: PatentNumber
-    , patentType :: PatentType
+    { patentNumber :: ByteString
+    , patentType :: ByteString
     , serialNumber :: Int
     , submitDate :: UTCTime
-    , applicant :: Applicant
+    , applicant :: ByteString
     } -> RefLoc
     
   Misc ::
-    { journal :: Publication
+    { journal :: ByteString
     , volume :: {-# UNPACK #-} !Int
     , issue :: Maybe Int
     , pages :: ByteString
@@ -145,51 +145,57 @@ newtype Release = Release Int
 newtype RefNo = RefNo Int
               deriving (Show,Eq)
                        
-newtype RefComment = RefComment ByteString
-                   deriving (Show,Eq)                  
-newtype RefGroup = RefGroup ByteString
-                 deriving (Show,Eq)
-                         
-newtype Title = Title ByteString
-              deriving (Show,Eq)                  
-newtype Keyword = Keyword ByteString
-                deriving (Show,Eq)                  
-newtype Author = Author ByteString
-               deriving (Show,Eq)
-newtype Publisher = Publisher ByteString
-                  deriving (Show,Eq)
-newtype Publication = Publication ByteString
-                    deriving (Show,Eq)
-newtype Address = Address ByteString
-                deriving (Show,Eq)
-newtype Database = Database ByteString
-                 deriving (Show,Eq)
-newtype PatentNumber = PatentNumber ByteString
-                          deriving (Show,Eq)
-newtype Applicant = Applicant ByteString
-                  deriving (Show,Eq)
-newtype PatentType = PatentType ByteString
-                   deriving (Show,Eq)
 
 data SeqData = SQ SeqStatistic ByteString
              | CS ByteString 
              deriving (Show,Eq)
 
-data Feature = Feature Key Location [(Qualifier,Value)]
-               deriving (Show,Eq)
+data Feature = Feature
+  { key :: ByteString
+  , locationStr :: ByteString
+  , valuePairs :: [(ByteString,ByteString)]
+  } deriving (Show,Eq)
                         
-newtype Key = Key ByteString
-            deriving (Show,Eq)
-
-newtype Location = Location ByteString
-                 deriving (Show,Eq)
-
-newtype Qualifier = Qualifier ByteString
-                  deriving (Show,Eq)
-
-newtype Value = Value ByteString
-                deriving (Show,Eq)
+-- newtype RefComment = RefComment ByteString
+--                    deriving (Show,Eq)                  
+-- newtype RefGroup = RefGroup ByteString
+--                  deriving (Show,Eq)
                          
+-- newtype Title = Title ByteString
+--               deriving (Show,Eq)                  
+-- newtype Keyword = Keyword ByteString
+--                 deriving (Show,Eq)                  
+-- newtype Author = Author ByteString
+--                deriving (Show,Eq)
+-- newtype Publisher = Publisher ByteString
+--                   deriving (Show,Eq)
+-- newtype Publication = Publication ByteString
+--                     deriving (Show,Eq)
+-- newtype Address = Address ByteString
+--                 deriving (Show,Eq)
+-- newtype Database = Database ByteString
+--                  deriving (Show,Eq)
+-- newtype PatentNumber = PatentNumber ByteString
+--                           deriving (Show,Eq)
+-- newtype Applicant = Applicant ByteString
+--                   deriving (Show,Eq)
+-- newtype PatentType = PatentType ByteString
+--                    deriving (Show,Eq)
+
+-- newtype Key = Key ByteString
+--             deriving (Show,Eq)
+
+-- newtype Location = Location ByteString
+--                  deriving (Show,Eq)
+
+-- newtype Qualifier = Qualifier ByteString
+--                   deriving (Show,Eq)
+
+-- newtype Value = Value ByteString
+--                 deriving (Show,Eq)
+                         
+-- newtype Taxonomy = Taxonomy ByteString
+--                  deriving (Show,Eq)
                       
 
 data AssemblyInformation = AssemblyInformation
@@ -218,9 +224,6 @@ data DataClass = CON -- ^ Entry constructed from segment entry sequences;
                | STS -- ^ Sequence Tagged Site
                | STD -- ^ Standard (all entries not classified as above)
                deriving (Show,Eq)
-
-newtype Taxonomy = Taxonomy ByteString
-                 deriving (Show,Eq)
     
                           
 
