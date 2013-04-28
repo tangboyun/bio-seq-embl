@@ -53,7 +53,6 @@ splitEMBL str =  if B8.null str
                 in lhs : splitEMBL remain
            else go is
       else go (j:is)
-{-# INLINE splitEMBL #-}
 
 -- | Extract `EMBL` record from a lazy `ByteString` , unparseable parts will be
 -- thrown away.

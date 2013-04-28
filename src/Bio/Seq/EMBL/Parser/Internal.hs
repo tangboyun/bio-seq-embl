@@ -30,33 +30,27 @@ import           Prelude hiding (takeWhile)
 import           System.Locale
 
 toTime :: String -> Maybe UTCTime
-{-# INLINE toTime #-}
 toTime = parseTime defaultTimeLocale "%d-%b-%Y"
 
 trim :: ByteString -> ByteString
-{-# INLINE trim #-}
 trim "" = ""
 trim str = if (== ' ') $ B8.last str
            then trim $ B8.init str
            else str
 
 mkHeader :: ByteString -> Parser String
-{-# INLINE mkHeader #-}
 mkHeader str = str .*> count 3 (satisfy (== ' ')) <?>
                (B8.unpack str ++ " Line")
 
 maybeXX :: Parser ()
-{-# INLINE maybeXX #-}
 maybeXX = option "" (fmap B8.concat $ many1 lineXX) *> return ()
   where
     lineXX = "XX" .*> takeWhile (/= '\n') <* endOfLine
     
 lineTM :: Parser ()
-{-# INLINE lineTM #-}
 lineTM = "//" .*> return () <?> "termination line"
 
 parseDC :: Parser DataClass
-{-# INLINE parseDC #-}
 parseDC = "CON" .*> return CON <|> 
           "PAT" .*> return PAT <|> 
           "EST" .*> return EST <|> 
@@ -71,12 +65,10 @@ parseDC = "CON" .*> return CON <|>
           "Data Class"
 
 parseTAX :: Parser ByteString
-{-# INLINE parseTAX #-}
 parseTAX = fmap (B8.pack)  $
            count 3 $ satisfy isUpper
 
 parseTOPO :: Parser Topology
-{-# INLINE parseTOPO #-}
 parseTOPO = "linear" .*> return Linear <|>
             "circular" .*> return Circular <?>
             "Topology"
@@ -84,7 +76,6 @@ parseTOPO = "linear" .*> return Linear <|>
 -- ID   X56734; SV 1; linear; mRNA; STD; PLN; 1859 BP.
 -- ID   cel-let-7         standard; RNA; CEL; 99 BP.
 parseID :: Parser Identification
-{-# INLINE parseID #-}
 parseID = do
   _ <- mkHeader "ID" 
   idf <- takeWhile1 (/= ' ') <* skipWhile (/= ';') <* char ';' <* skipSpace
@@ -101,7 +92,6 @@ parseID = do
 
 
 parseDT :: Parser Date
-{-# INLINE parseDT #-}
 parseDT = Date <$> lineDT1 <*> lineDT2
   where 
     parseTimeStr =
@@ -128,7 +118,6 @@ parseDT = Date <$> lineDT1 <*> lineDT2
         Just t -> return (t,relNum,verNum)
 
 parseDE :: Parser ByteString
-{-# INLINE parseDE #-}
 parseDE = do
   fmap (B8.intercalate " ") $
     mkHeader "DE" *> 
@@ -136,7 +125,6 @@ parseDE = do
     (endOfLine *> mkHeader "DE") <* endOfLine
 
 parseKW :: Parser [ByteString]
-{-# INLINE parseKW #-}
 parseKW = do
   fmap concat $ mkHeader "KW" *>
     (goKW `sepBy1` string "; ") `sepBy1`
@@ -145,7 +133,6 @@ parseKW = do
     goKW = takeWhile (\c -> c /= ';' && c /= '.')
 
 parseOS :: Parser (ByteString,Maybe ByteString)
-{-# INLINE parseOS #-}
 parseOS = do
   _ <- mkHeader "OS"
   des <- fmap (B8.intercalate " ") $
@@ -163,7 +150,6 @@ parseOS = do
   return (des,ogname)
 
 parseOC :: Parser [ByteString]
-{-# INLINE parseOC #-}
 parseOC = do
   fmap concat $
     mkHeader "OC" *>
@@ -173,19 +159,16 @@ parseOC = do
     char '.' <* endOfLine
 
 parseOG :: Parser ByteString
-{-# INLINE parseOG #-}
 parseOG = do
   mkHeader "OG" *>
     takeWhile1 (/= '\n') <* endOfLine
 
 parsePR :: Parser ByteString
-{-# INLINE parsePR #-}
 parsePR = do
   mkHeader "PR" *> takeWhile (/= ';') <* char ';' <* endOfLine
   
 
 parseAC :: Parser [ByteString]
-{-# INLINE parseAC #-}
 parseAC = do
   fmap concat $ mkHeader "AC" *>
     (takeWhile1 (/= ';') `sepBy1`
@@ -193,19 +176,16 @@ parseAC = do
     char ';' <* endOfLine
 
 parsePaper :: Parser RefLoc
-{-# INLINE parsePaper #-}
 parsePaper = do
   (pub,vol,iss,pg,y) <- mkHeader "RL" *> parseJ
   return $ Paper pub vol iss pg y
 
 parseMisc :: Parser RefLoc
-{-# INLINE parseMisc #-}
 parseMisc = do
   (pub,vol,iss,pg,y) <- mkHeader "RL" *> "(misc) " .*> parseJ
   return $ Misc pub vol iss pg y
   
 parseJ :: Parser (ByteString,Int,Maybe Int,ByteString,Int)
-{-# INLINE parseJ #-}
 parseJ = do
   pub <- fmap (B8.intercalate " ") $
          word `sepBy1` char ' '
@@ -231,7 +211,6 @@ parseJ = do
                  _ -> fail "Not word boundary")
 
 parseBook :: Parser RefLoc
-{-# INLINE parseBook #-}
 parseBook = do
   auths <- fmap concat $
            mkHeader "RL" *> "(in) " .*>
@@ -252,7 +231,6 @@ parseBook = do
     as = takeWhile (\c -> c /= ',' && c /= ';') `sepBy1` string ", "
 
 parseSubmitted :: Parser RefLoc
-{-# INLINE parseSubmitted #-}
 parseSubmitted = do
   timeStr <- fmap B8.unpack $
              mkHeader "RL" *> "Submitted " .*> char '(' *>
@@ -269,7 +247,6 @@ parseSubmitted = do
     Just t -> return $ Submitted t db addr
 
 parseThesis :: Parser RefLoc
-{-# INLINE parseThesis #-}
 parseThesis = do
   y <- mkHeader "RL" *> "Thesis " .*>
        char '(' *> decimal <* char ')' <*. ", "
@@ -279,19 +256,16 @@ parseThesis = do
   return $ Thesis sch y
 
 parseUnpublished :: Parser RefLoc
-{-# INLINE parseUnpublished #-}
 parseUnpublished = do
   mkHeader "RL" *> "Unpublished" .*>
     char '.' *> endOfLine *> return Unpublished
 
 parseOther :: Parser RefLoc
-{-# INLINE parseOther #-}
 parseOther = do
   fmap (Other . B8.init . B8.intercalate " ") $
     mkHeader "RL" *> takeWhile1 (/= '\n') `sepBy1` (endOfLine *> mkHeader "RL") <* endOfLine
 
 parsePatent :: Parser RefLoc
-{-# INLINE parsePatent #-}
 parsePatent = do
   patNum <- mkHeader "RL" *>
             "Patent number " .*> takeWhile1 (/= '-') <* char '-'
@@ -307,20 +281,17 @@ parsePatent = do
     Just t -> return $ Patent patNum patType sn t appCan
     
 parseRN :: Parser Int
-{-# INLINE parseRN #-}
 parseRN = do
   mkHeader "RN" *> char '[' *>
     decimal <* char ']' <* endOfLine 
 
 parseRC :: Parser ByteString
-{-# INLINE parseRC #-}
 parseRC = do
   fmap (B8.intercalate " ") $
     mkHeader "RC" *> takeWhile1 (/= '\n') `sepBy1`
     (endOfLine *> mkHeader "RC") <* endOfLine
 
 parseRP :: Parser [(Int,Int)]
-{-# INLINE parseRP #-}
 parseRP =
   fmap concat $ (goRP `sepBy1` endOfLine) <* endOfLine
   where
@@ -334,18 +305,15 @@ parseRP =
         ) `sepBy1` string ", "
 
 parseRX :: Parser Resource
-{-# INLINE parseRX #-}
 parseRX = do
   Resource <$> (mkHeader "RX" *> takeWhile1 isUpper <* string "; ")
            <*> fmap B8.init (takeWhile1 (/= '\n') <* endOfLine)
   
 parseRG :: Parser ByteString
-{-# INLINE parseRG #-}
 parseRG = do
   mkHeader "RG" *> takeWhile1 (/= '\n') <* endOfLine
   
 parseRA :: Parser [ByteString]
-{-# INLINE parseRA #-}
 parseRA = mkHeader "RA" *> 
           oneAuthor `sepBy1`
           (char ',' *> many1 (satisfy (\c -> c == ' ' || c == '\n')) <*
@@ -359,7 +327,6 @@ parseRA = mkHeader "RA" *>
 
 
 parseRT :: Parser ByteString
-{-# INLINE parseRT #-}
 parseRT = empLine <|>
           oneLine <|>
           mulLine <?> "Reference Title"
@@ -383,7 +350,6 @@ parseRT = empLine <|>
               
     
 parseRL :: Parser RefLoc
-{-# INLINE parseRL #-}
 parseRL = parsePaper <|>
           parseSubmitted <|>
           parsePatent <|>
@@ -409,17 +375,14 @@ isLegalFKChar w | 97 <= w, w <= 122 = True
                 | w == 95 || w == 39 ||
                   w == 42 || w == 45 = True
                 | otherwise = False
-{-# INLINE isLegalFKChar #-}          
 
 parseCC :: Parser ByteString
-{-# INLINE parseCC #-}
 parseCC = do
   fmap (B8.intercalate " ") $
     mkHeader "CC" *> takeWhile1 (/= '\n') `sepBy1`
     (endOfLine *> mkHeader "CC") <* endOfLine
   
 parseFT :: Parser [Feature]
-{-# INLINE parseFT #-}
 parseFT = do
   many1 lineFH *>
     many1 ( do
@@ -459,7 +422,6 @@ parseFT = do
     lineFH = "FH" .*> takeWhile (/= '\n') *> endOfLine
 
 parseDR :: Parser DBCrossRef
-{-# INLINE parseDR #-}
 parseDR = do
   db <- mkHeader "DR" *> takeWhile (/= ';')
   pID <- char ';' *> char ' ' *> takeWhile1 (/= ';') <* char ';' <* char ' '
@@ -468,7 +430,6 @@ parseDR = do
   return $ DBCrossRef db pID sID
 
 parseASI :: Parser [AssemblyInformation]
-{-# INLINE parseASI #-}
 parseASI = do
   lineAH *>
     many1 (do
@@ -494,7 +455,6 @@ parseASI = do
     lineAH = "AH" .*> takeWhile (/= '\n') *> endOfLine
 
 parseOrganism :: Parser Organism
-{-# INLINE parseOrganism #-}
 parseOrganism = do
   (ogname,cName) <- parseOS
   cs <- parseOC
@@ -504,7 +464,6 @@ parseOrganism = do
   
 
 parseRef :: Parser Reference
-{-# INLINE parseRef #-}
 parseRef = do
   rn <- fmap RefNo parseRN
   rp <- optional $ parseRP
@@ -517,7 +476,6 @@ parseRef = do
   return $ Reference rn rc rp rx rg as title rl
 
 parseCS :: Parser SeqData
-{-# INLINE parseCS #-}
 parseCS = do
   fmap (CS . B8.intercalate " ") $
     (many1
@@ -526,7 +484,6 @@ parseCS = do
     lineTM
 
 parseSQ :: Parser SeqData
-{-# INLINE parseSQ #-}
 parseSQ = do
   _ <- mkHeader "SQ" *> "Sequence " .*> (decimal :: Parser Int) <*. " BP;"
   aNum <- char ' ' *> decimal <*. " A;"

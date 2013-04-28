@@ -25,7 +25,6 @@ import           Control.Applicative
 import           Data.Attoparsec.ByteString.Char8
 
 parseEMBL :: Parser EMBL
-{-# INLINE parseEMBL #-}
 parseEMBL = do
   idf <- parseID
   maybeXX
