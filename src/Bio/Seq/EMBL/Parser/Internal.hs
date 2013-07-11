@@ -78,8 +78,8 @@ parseTOPO = "linear" .*> return Linear <|>
 parseID :: Parser Identification
 parseID = do
   _ <- mkHeader "ID" 
-  idf <- takeWhile1 (/= ' ') <* skipWhile (/= ';') <* char ';' <* skipSpace
-  sv <- optional $ "SV" .*> skipSpace *>
+  idf <- takeWhile1 (/= ' ') <* skipWhile (/= ';') <* char ';' 
+  sv <- optional $ skipSpace *> "SV" .*> skipSpace *>
         decimal <* char ';' 
   topo <- optional $ skipSpace *> parseTOPO <* char ';'
   mol <- skipSpace *> takeWhile1 (/= ';') <*

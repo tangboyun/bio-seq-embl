@@ -223,6 +223,7 @@ data DataClass = CON -- ^ Entry constructed from segment entry sequences;
                | TSA -- ^ Transcriptome Shotgun Assembly
                | STS -- ^ Sequence Tagged Site
                | STD -- ^ Standard (all entries not classified as above)
+               | Custom ByteString
                deriving (Show,Eq)
     
                           
